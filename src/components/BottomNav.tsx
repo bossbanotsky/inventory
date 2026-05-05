@@ -2,7 +2,7 @@ import React from 'react';
 import { Package, Send, Users, History, TrendingUp } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-export type TabType = 'inventory' | 'disburse' | 'receivers' | 'history' | 'reports';
+export type TabType = 'inventory' | 'receivers' | 'history' | 'reports';
 
 interface BottomNavProps {
   currentTab: TabType;
@@ -12,7 +12,6 @@ interface BottomNavProps {
 export function BottomNav({ currentTab, onChangeTab }: BottomNavProps) {
   const tabs = [
     { id: 'inventory', label: 'Inventory', icon: Package },
-    { id: 'disburse', label: 'Disburse', icon: Send },
     { id: 'receivers', label: 'Receivers', icon: Users },
     { id: 'history', label: 'History', icon: History },
     { id: 'reports', label: 'Reports', icon: TrendingUp },

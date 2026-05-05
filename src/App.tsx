@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BottomNav, TabType } from './components/BottomNav';
+import { useInventoryStore } from './lib/store';
 import { InventoryView } from './views/InventoryView';
-import { DisburseView } from './views/DisburseView';
 import { ReceiversView } from './views/ReceiversView';
 import { HistoryView } from './views/HistoryView';
 import { ReportsView } from './views/ReportsView';
@@ -10,7 +10,8 @@ import { signOut } from 'firebase/auth';
 import { LogOut } from 'lucide-react';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<TabType>('inventory');
+  const currentTab = useInventoryStore(state => state.activeTab);
+  const setCurrentTab = useInventoryStore(state => state.setActiveTab);
 
   const handleLogout = async () => {
     try {
@@ -35,7 +36,6 @@ export default function App() {
 
       <main className="flex-1 w-full overflow-y-auto pb-safe">
         {currentTab === 'inventory' && <InventoryView />}
-        {currentTab === 'disburse' && <DisburseView />}
         {currentTab === 'receivers' && <ReceiversView />}
         {currentTab === 'history' && <HistoryView />}
         {currentTab === 'reports' && <ReportsView />}

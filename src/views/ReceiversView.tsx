@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { useInventoryStore, formatPieces, Transaction } from '../lib/store';
-import { Users, ChevronDown, ChevronUp, PackageOpen, Calendar, Plus, X, Edit2, Trash2 } from 'lucide-react';
+import { useInventoryStore, formatPieces, Transaction, getStockLevel } from '../lib/store';
+import { Users, ChevronDown, ChevronUp, PackageOpen, Calendar, Plus, X, Edit2, Trash2, Send, History } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
-import { Button, Input } from '../components/ui/Forms';
+import { Button, Input, Select } from '../components/ui/Forms';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 export function ReceiversView() {
   const { receivers, transactions, items, addReceiver, updateReceiver, deleteReceiver } = useInventoryStore();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showDisburseForm, setShowDisburseForm] = useState(false);
   const [editingReceiver, setEditingReceiver] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{isOpen: boolean, id: string, name: string}>({ isOpen: false, id: '', name: '' });
 
@@ -117,32 +118,127 @@ export function ReceiversView() {
                     <Button type="submit" className="w-full">Save Changes</Button>
                   </form>
                 ) : (
-                  <div className="w-full text-left px-5 py-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                    <button 
-                      onClick={() => setExpanded(isExpanded ? null : receiver.id)}
-                      className="flex-1 flex flex-col text-left"
-                      aria-expanded={isExpanded}
-                    >
-                      <span className="font-bold text-gray-900 text-lg">{receiver.name}</span>
-                      <span className="text-xs text-gray-500 font-medium">{receiverTxs.length} Transactions</span>
-                    </button>
+                  <div className="w-full text-left px-4 py-3 flex flex-col gap-3 hover:bg-gray-50 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <button 
+                        onClick={() => {
+                           if (expanded === receiver.id) {
+                             setExpanded(null);
+                           } else {
+                             setExpanded(receiver.id);
+                             setShowDisburseForm(false);
+                           }
+                        }}
+                        className="flex-1 flex flex-col text-left focus:outline-none"
+                        aria-expanded={isExpanded}
+                      >
+                        <span className="font-bold text-gray-900 text-lg leading-tight">{receiver.name}</span>
+                        <span className="text-xs text-gray-500 font-medium mt-0.5">{receiverTxs.length} Transactions</span>
+                      </button>
+                      
+                      <div className="flex items-center gap-1 -mt-1 -mr-1">
+                        <button onClick={() => setEditingReceiver(receiver.id)} className="p-2 text-gray-400 hover:text-blue-600 rounded-full hover:bg-blue-50 transition-colors">
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setDeleteDialog({ isOpen: true, id: receiver.id, name: receiver.name })} className="p-2 text-gray-400 hover:text-red-600 rounded-full hover:bg-red-50 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                     
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setEditingReceiver(receiver.id)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setDeleteDialog({ isOpen: true, id: receiver.id, name: receiver.name })} className="p-1.5 text-gray-400 hover:text-red-600 rounded">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setExpanded(isExpanded ? null : receiver.id)} className="p-1.5 text-gray-400">
-                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                      </button>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (expanded === receiver.id && showDisburseForm) {
+                            setShowDisburseForm(false);
+                            setExpanded(null);
+                          } else {
+                            setExpanded(receiver.id);
+                            setShowDisburseForm(true);
+                          }
+                        }}
+                        className="flex-1 h-9 rounded-lg gap-1.5 font-semibold text-sm shadow-sm bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Send className="w-4 h-4" />
+                        Disburse
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          useInventoryStore.getState().setHistoryFilters({ receiverId: receiver.id, type: 'ALL', itemId: 'ALL' });
+                          useInventoryStore.getState().setActiveTab('history');
+                        }}
+                        className="h-9 rounded-lg gap-1.5 font-semibold px-4 text-sm shadow-sm border-gray-300"
+                      >
+                        <History className="w-4 h-4" />
+                        Full History
+                      </Button>
                     </div>
                   </div>
                 )}
 
                 {isExpanded && !isEditing && (
                   <div className="border-t border-gray-100 bg-gray-50/50 p-4">
+                    {showDisburseForm && (
+                      <div className="bg-white border border-blue-200 rounded-lg p-3 mb-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+                        <h4 className="text-sm font-bold text-blue-800 mb-2">Disburse to {receiver.name}</h4>
+                        <form onSubmit={(e) => {
+                          e.preventDefault();
+                          const fd = new FormData(e.currentTarget);
+                          const itemId = fd.get('itemId') as string;
+                          const u = Number(fd.get('units')) || 0;
+                          const p = Number(fd.get('pieces')) || 0;
+                          const notes = fd.get('notes') as string;
+                          const batchNumber = fd.get('batchNumber') as string;
+                          
+                          const item = items.find(i => i.id === itemId);
+                          if (!item) return;
+                          
+                          const totalPieces = (u * item.piecesPerUnit) + p;
+                          if (totalPieces <= 0) return;
+                          
+                          const stock = getStockLevel(item.id, transactions);
+                          if (totalPieces > stock) {
+                            alert(`Insufficient stock. You only have ${stock} pieces available.`);
+                            return;
+                          }
+                          
+                          useInventoryStore.getState().addTransaction({
+                            type: 'DISBURSE',
+                            itemId: item.id,
+                            receiverId: receiver.id,
+                            pieceQuantity: totalPieces,
+                            displayString: `${u ? u + ' ' + item.unitMeasurement : ''} ${p ? p + ' pcs' : ''}`.trim() || `${totalPieces} pcs`,
+                            notes,
+                            batchNumber: batchNumber || undefined
+                          });
+                          setShowDisburseForm(false);
+                        }} className="flex flex-col gap-3">
+                          <Select name="itemId" label="Select Item" required>
+                            <option value="">-- Choose Item --</option>
+                            {items.map(i => {
+                               const stock = getStockLevel(i.id, transactions);
+                               return (
+                                 <option key={i.id} value={i.id} disabled={stock === 0}>
+                                   {i.name} ({stock > 0 ? formatPieces(stock, i.piecesPerUnit, i.unitMeasurement) : 'Out of stock'})
+                                 </option>
+                               );
+                            })}
+                          </Select>
+                          <div className="flex gap-2">
+                            <Input name="units" type="number" min="0" label="Qty (Units)" placeholder="0" className="flex-1" />
+                            <Input name="pieces" type="number" min="0" label="Pieces" placeholder="0" className="flex-1" />
+                          </div>
+                          <Input name="batchNumber" label="Batch / Lot Number" placeholder="Optional" />
+                          <Input name="notes" label="Notes" placeholder="Optional" />
+                          <div className="flex gap-2 mt-1">
+                            <Button type="button" variant="secondary" onClick={() => setShowDisburseForm(false)} className="flex-1">Cancel</Button>
+                            <Button type="submit" className="flex-1">Complete Disburse</Button>
+                          </div>
+                        </form>
+                      </div>
+                    )}
                     {receiverTxs.length === 0 ? (
                       <div className="text-center py-6 text-gray-500 text-sm flex flex-col items-center gap-2">
                         <PackageOpen className="w-8 h-8 text-gray-300"/>

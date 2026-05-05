@@ -49,12 +49,27 @@ interface InventoryState {
   addReceiver: (receiver: Omit<Receiver, 'id'>) => Promise<void>;
   updateReceiver: (id: string, updated: Partial<Receiver>) => Promise<void>;
   deleteReceiver: (id: string) => Promise<void>;
+
+  // UI state
+  activeTab: 'inventory' | 'receivers' | 'history' | 'reports';
+  setActiveTab: (tab: 'inventory' | 'receivers' | 'history' | 'reports') => void;
+  historyFilters: {
+    type: string;
+    itemId: string;
+    receiverId: string;
+  };
+  setHistoryFilters: (filters: Partial<{ type: string; itemId: string; receiverId: string }>) => void;
 }
 
 export const useInventoryStore = create<InventoryState>()((set) => ({
   items: [],
   receivers: [],
   transactions: [],
+  activeTab: 'inventory',
+  historyFilters: { type: 'ALL', itemId: 'ALL', receiverId: 'ALL' },
+
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  setHistoryFilters: (filters) => set((state) => ({ historyFilters: { ...state.historyFilters, ...filters } })),
 
   setItems: (items) => set({ items }),
   setReceivers: (receivers) => set({ receivers }),
@@ -149,18 +164,30 @@ export const getStockLevel = (itemId: string, transactions: Transaction[]) => {
 };
 
 export const formatPieces = (pieces: number, piecesPerUnit: number, unitMeasurement: string) => {
-  if (piecesPerUnit <= 1) return `${pieces} ${unitMeasurement}`;
+  const isBox = unitMeasurement.toLowerCase() === 'box' || unitMeasurement.toLowerCase() === 'boxes';
+  const unitLoc = isBox ? 'Box' : unitMeasurement;
+  const pluralUnit = isBox ? 'Boxes' : (unitLoc.endsWith('s') ? unitLoc : `${unitLoc}s`);
+
+  if (pieces === 0) {
+    return `0 ${pluralUnit}`;
+  }
+
+  if (piecesPerUnit <= 1) {
+    return `${pieces} ${pieces === 1 ? unitLoc : pluralUnit}`;
+  }
+
   const units = Math.floor(pieces / piecesPerUnit);
   const remainder = pieces % piecesPerUnit;
   let res = [];
+
   if (units > 0) {
-    const isBox = unitMeasurement.toLowerCase() === 'box';
-    const pluralUnit = isBox ? 'Boxes' : `${unitMeasurement}s`;
-    res.push(`${units} ${units === 1 ? unitMeasurement : pluralUnit}`);
+    res.push(`${units} ${units === 1 ? unitLoc : pluralUnit}`);
   }
-  if (remainder > 0 || pieces === 0) {
+  
+  if (remainder > 0) {
     res.push(`${remainder} pc${remainder !== 1 ? 's' : ''}`);
   }
+
   return res.join(', ');
 };
 

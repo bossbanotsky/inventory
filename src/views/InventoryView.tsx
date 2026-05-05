@@ -169,17 +169,29 @@ export function InventoryView() {
                       </div>
                       
                       {!isReceiving && (
-                        <Button 
-                          variant="secondary" 
-                          className="w-full mt-2" 
-                          onClick={() => {
-                            setReceiveUnits('');
-                            setReceivePieces('');
-                            setShowReceiveForm(item.id);
-                          }}
-                        >
-                          Receive Stock
-                        </Button>
+                        <div className="flex gap-2 w-full mt-2">
+                          <Button 
+                            variant="secondary" 
+                            className="flex-1" 
+                            onClick={() => {
+                              setReceiveUnits('');
+                              setReceivePieces('');
+                              setShowReceiveForm(item.id);
+                            }}
+                          >
+                            Receive Stock
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={() => {
+                              useInventoryStore.getState().setHistoryFilters({ itemId: item.id, type: 'ALL', receiverId: 'ALL' });
+                              useInventoryStore.getState().setActiveTab('history');
+                            }}
+                          >
+                            Item History
+                          </Button>
+                        </div>
                       )}
                       
                       {isReceiving && (
@@ -190,6 +202,7 @@ export function InventoryView() {
                             const u = Number(receiveUnits) || 0;
                             const p = Number(receivePieces) || 0;
                             const notes = fd.get('notes') as string;
+                            const supplierName = fd.get('supplierName') as string;
                             let batchNumber = fd.get('batchNumber') as string;
                             const receiveDateStr = fd.get('receiveDate') as string;
                             
@@ -220,13 +233,18 @@ export function InventoryView() {
                                 finalDate = d.toISOString();
                             }
                             
+                            let finalNotes = notes;
+                            if (supplierName) {
+                              finalNotes = finalNotes ? `From ${supplierName} | ${finalNotes}` : `From ${supplierName}`;
+                            }
+                            
                             addTransaction({
                               type: 'RECEIVE',
                               itemId: item.id,
                               receiverId: null,
                               pieceQuantity: totalPieces,
                               displayString: `Received ${u ? u + ' ' + item.unitMeasurement : ''} ${p ? p + ' pcs' : ''}`.trim() || `${totalPieces} pcs`,
-                              notes,
+                              notes: finalNotes,
                               batchNumber,
                               date: finalDate
                             });
@@ -280,6 +298,8 @@ export function InventoryView() {
                           </div>
                           <span className="text-[10px] text-gray-500 -mt-2">Leave batch empty to auto-generate (e.g. {item.name.substring(0, 2).toUpperCase()}-0001)</span>
 
+                          <Input name="supplierName" label="Supplier / Received From" placeholder="e.g. Acme Corp (Optional)" />
+                          
                           {((Number(receiveUnits) || 0) * item.piecesPerUnit + (Number(receivePieces) || 0)) > 0 && (
                             <div className="bg-green-50/50 rounded-lg p-2.5 flex items-center justify-between border border-green-100">
                               <div className="flex items-center gap-2 text-green-700 font-medium text-xs">
@@ -320,12 +340,13 @@ export function InventoryView() {
                                     <div className="flex flex-col">
                                       <span className="font-bold text-gray-800 text-sm">{batch.batchNumber}</span>
                                       <span className="text-xs text-gray-500">Rcvd: {new Date(batch.date).toLocaleDateString()}</span>
+                                      <span className="text-xs text-gray-500">Orig: {formatPieces(batch.originalQty, item.piecesPerUnit, item.unitMeasurement)}</span>
                                     </div>
                                     <div className="flex flex-col items-end gap-0.5">
                                       <span className="font-black text-blue-700 text-sm bg-blue-50 px-2 py-1.5 rounded-md border border-blue-100">
                                         {formatPieces(batch.remainingQty, item.piecesPerUnit, item.unitMeasurement)}
                                       </span>
-                                      <span className="text-[11px] font-bold text-gray-500">{batch.remainingQty} pcs</span>
+                                      <span className="text-[11px] font-bold text-gray-500">{batch.remainingQty} pcs rem.</span>
                                     </div>
                                   </div>
                                 ))
