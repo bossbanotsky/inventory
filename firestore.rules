@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} { allow read, write: if false; }
+
+    function isSignedIn() { return request.auth != null; }
+    
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'banotsky2020@gmail.com' ||
+        request.auth.token.email == 'marqueznorthed@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+
+    function isValidItem(data) {
+      return data.keys().hasAll(['name', 'unitMeasurement', 'piecesPerUnit', 'createdAt'])
+        && data.size() >= 4 && data.size() <= 5
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.unitMeasurement is string && data.unitMeasurement.size() > 0 && data.unitMeasurement.size() <= 50
+        && data.piecesPerUnit is number
+        && data.createdAt is number;
+    }
+
+    function isValidReceiver(data) {
+      return data.keys().hasAll(['name'])
+        && data.size() >= 1 && data.size() <= 2
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['date', 'type', 'itemId', 'pieceQuantity', 'displayString', 'notes'])
+        && data.size() >= 6 && data.size() <= 8
+        && data.date is string && data.date.size() > 0 && data.date.size() <= 50
+        && data.type is string && data.type in ['RECEIVE', 'DISBURSE', 'ADJUSTMENT']
+        && data.itemId is string && data.itemId.size() > 0 && data.itemId.size() <= 128
+        && data.receiverId == null || (data.receiverId is string && data.receiverId.size() <= 128)
+        && data.pieceQuantity is number
+        && data.displayString is string && data.displayString.size() <= 200
+        && data.notes is string && data.notes.size() <= 500;
+    }
+
+    match /items/{itemId} {
+      allow list: if isAdmin();
+      allow get: if isAdmin() && isValidId(itemId);
+      allow create: if isAdmin() && isValidId(itemId) && isValidItem(incoming());
+      allow update: if isAdmin() && isValidId(itemId) && isValidItem(incoming());
+      allow delete: if isAdmin() && isValidId(itemId);
+    }
+    
+    match /receivers/{receiverId} {
+      allow list: if isAdmin();
+      allow get: if isAdmin() && isValidId(receiverId);
+      allow create: if isAdmin() && isValidId(receiverId) && isValidReceiver(incoming());
+      allow update: if isAdmin() && isValidId(receiverId) && isValidReceiver(incoming());
+      allow delete: if isAdmin() && isValidId(receiverId);
+    }
+
+    match /transactions/{transactionId} {
+      allow list: if isAdmin();
+      allow get: if isAdmin() && isValidId(transactionId);
+      allow create: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming())
+        && exists(/databases/$(database)/documents/items/$(incoming().itemId));
+      allow update: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming());
+      allow delete: if isAdmin() && isValidId(transactionId);
+    }
+
+    match /admins/{adminId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

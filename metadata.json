@@ -1,0 +1,6 @@
+{
+  "name": "Remix: Inventory Tracker PWA",
+  "description": "Mobile-friendly, PWA-installable inventory management with unit breakdowns and receiver tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

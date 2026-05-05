@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "Item": {
+      "title": "Item",
+      "description": "An inventory item.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "unitMeasurement": { "type": "string" },
+        "piecesPerUnit": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "unitMeasurement", "piecesPerUnit", "createdAt"]
+    },
+    "Receiver": {
+      "title": "Receiver",
+      "description": "A person or entity that receives items.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A transaction log for incoming or outgoing inventory.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "type": { "type": "string", "enum": ["RECEIVE", "DISBURSE", "ADJUSTMENT"] },
+        "itemId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "pieceQuantity": { "type": "number" },
+        "displayString": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["date", "type", "itemId", "pieceQuantity", "displayString", "notes"]
+    }
+  },
+  "firestore": {
+    "/items/{itemId}": {
+      "schema": { "$ref": "#/entities/Item" },
+      "description": "Stores inventory items."
+    },
+    "/receivers/{receiverId}": {
+      "schema": { "$ref": "#/entities/Receiver" },
+      "description": "Stores receivers."
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Stores all transactions globally."
+    }
+  }
+}
