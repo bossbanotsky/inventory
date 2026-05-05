@@ -34,44 +34,46 @@ service cloud.firestore {
 
     function isValidTransaction(data) {
       return data.keys().hasAll(['date', 'type', 'itemId', 'pieceQuantity', 'displayString', 'notes'])
-        && data.size() >= 6 && data.size() <= 8
+        && data.size() >= 6 && data.size() <= 10
         && data.date is string && data.date.size() > 0 && data.date.size() <= 50
         && data.type is string && data.type in ['RECEIVE', 'DISBURSE', 'ADJUSTMENT']
         && data.itemId is string && data.itemId.size() > 0 && data.itemId.size() <= 128
-        && data.receiverId == null || (data.receiverId is string && data.receiverId.size() <= 128)
+        && (!data.keys().hasAny(['receiverId']) || data.receiverId == null || (data.receiverId is string && data.receiverId.size() <= 128))
+        && (!data.keys().hasAny(['batchNumber']) || data.batchNumber == null || (data.batchNumber is string && data.batchNumber.size() <= 128))
+        && (!data.keys().hasAny(['receivedBy']) || data.receivedBy == null || (data.receivedBy is string && data.receivedBy.size() <= 128))
         && data.pieceQuantity is number
         && data.displayString is string && data.displayString.size() <= 200
         && data.notes is string && data.notes.size() <= 500;
     }
 
     match /items/{itemId} {
-      allow list: if isAdmin();
-      allow get: if isAdmin() && isValidId(itemId);
-      allow create: if isAdmin() && isValidId(itemId) && isValidItem(incoming());
-      allow update: if isAdmin() && isValidId(itemId) && isValidItem(incoming());
-      allow delete: if isAdmin() && isValidId(itemId);
+      allow list: if request.auth != null;
+      allow get: if request.auth != null && isValidId(itemId);
+      allow create: if request.auth != null && isValidId(itemId) && isValidItem(incoming());
+      allow update: if request.auth != null && isValidId(itemId) && isValidItem(incoming());
+      allow delete: if request.auth != null && isValidId(itemId);
     }
     
     match /receivers/{receiverId} {
-      allow list: if isAdmin();
-      allow get: if isAdmin() && isValidId(receiverId);
-      allow create: if isAdmin() && isValidId(receiverId) && isValidReceiver(incoming());
-      allow update: if isAdmin() && isValidId(receiverId) && isValidReceiver(incoming());
-      allow delete: if isAdmin() && isValidId(receiverId);
+      allow list: if request.auth != null;
+      allow get: if request.auth != null && isValidId(receiverId);
+      allow create: if request.auth != null && isValidId(receiverId) && isValidReceiver(incoming());
+      allow update: if request.auth != null && isValidId(receiverId) && isValidReceiver(incoming());
+      allow delete: if request.auth != null && isValidId(receiverId);
     }
 
     match /transactions/{transactionId} {
-      allow list: if isAdmin();
-      allow get: if isAdmin() && isValidId(transactionId);
-      allow create: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming())
+      allow list: if request.auth != null;
+      allow get: if request.auth != null && isValidId(transactionId);
+      allow create: if request.auth != null && isValidId(transactionId) && isValidTransaction(incoming())
         && exists(/databases/$(database)/documents/items/$(incoming().itemId));
-      allow update: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming());
-      allow delete: if isAdmin() && isValidId(transactionId);
+      allow update: if request.auth != null && isValidId(transactionId) && isValidTransaction(incoming());
+      allow delete: if request.auth != null && isValidId(transactionId);
     }
 
     match /admins/{adminId} {
-      allow get, list: if isAdmin();
-      allow create, update, delete: if isAdmin();
+      allow get, list: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
     }
   }
 }
