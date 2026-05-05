@@ -144,19 +144,19 @@ export function ReportsView() {
                           if (!item) return null;
                           return (
                             <div key={itemId} className="flex flex-col border-b border-gray-100 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
-                              <div className="flex justify-between items-center text-sm mb-1">
-                                <span className="text-gray-900 font-bold">{item.name}</span>
-                                <span className="text-green-700 font-bold bg-green-50 px-2 py-0.5 rounded">{formatPieces(total, item.piecesPerUnit, item.unitMeasurement)}</span>
+                              <div className="flex justify-between items-center text-sm mb-1 gap-2">
+                                <span className="text-gray-900 font-bold break-words min-w-0">{item.name}</span>
+                                <span className="text-green-700 font-bold bg-green-50 px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">{formatPieces(total, item.piecesPerUnit, item.unitMeasurement)}</span>
                               </div>
                               <div className="flex flex-col gap-1 pl-2 border-l border-green-200 ml-1">
                                 {txs.map(tx => (
                                   <div key={tx.id} className="text-xs flex flex-col gap-0.5 text-gray-500">
-                                    <div className="flex justify-between">
-                                      <span>{format(parseISO(tx.date), 'MMM d, h:mm a')}</span>
-                                      <span className="font-semibold text-green-600">+{formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}</span>
+                                    <div className="flex justify-between gap-2">
+                                      <span className="flex-shrink-0 whitespace-nowrap">{format(parseISO(tx.date), 'MMM d, h:mm a')}</span>
+                                      <span className="font-semibold text-green-600 break-words min-w-0 text-right">+{formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}</span>
                                     </div>
-                                    {tx.batchNumber && <span className="text-gray-400">Batch: {tx.batchNumber}</span>}
-                                    {tx.notes && <span className="italic">Note: {tx.notes}</span>}
+                                    {tx.batchNumber && <span className="text-gray-400 break-words min-w-0">Batch: {tx.batchNumber}</span>}
+                                    {tx.notes && <span className="italic break-words min-w-0">Note: {tx.notes}</span>}
                                   </div>
                                 ))}
                               </div>
@@ -179,19 +179,19 @@ export function ReportsView() {
                           if (!item) return null;
                           return (
                             <div key={itemId} className="flex flex-col border-b border-gray-100 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
-                              <div className="flex justify-between items-center text-sm mb-1">
-                                <span className="text-gray-900 font-bold">{item.name}</span>
-                                <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">{formatPieces(total, item.piecesPerUnit, item.unitMeasurement)}</span>
+                              <div className="flex justify-between items-center text-sm mb-1 gap-2">
+                                <span className="text-gray-900 font-bold break-words min-w-0">{item.name}</span>
+                                <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">{formatPieces(total, item.piecesPerUnit, item.unitMeasurement)}</span>
                               </div>
                               <div className="flex flex-col gap-1 pl-2 border-l border-blue-200 ml-1">
                                 {txs.map(tx => (
                                   <div key={tx.id} className="text-xs flex flex-col gap-0.5 text-gray-500">
-                                    <div className="flex justify-between">
-                                      <span>{format(parseISO(tx.date), 'MMM d, h:mm a')}</span>
-                                      <span className="font-semibold text-blue-600">-{formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}</span>
+                                    <div className="flex justify-between gap-2">
+                                      <span className="flex-shrink-0 whitespace-nowrap">{format(parseISO(tx.date), 'MMM d, h:mm a')}</span>
+                                      <span className="font-semibold text-blue-600 break-words min-w-0 text-right">-{formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}</span>
                                     </div>
-                                    <span className="text-gray-400">To: {getReceiverName(tx.receiverId)}</span>
-                                    {tx.notes && <span className="italic">Note: {tx.notes}</span>}
+                                    <span className="text-gray-400 break-words min-w-0">To: {getReceiverName(tx.receiverId)}</span>
+                                    {tx.notes && <span className="italic break-words min-w-0">Note: {tx.notes}</span>}
                                   </div>
                                 ))}
                               </div>

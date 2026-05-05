@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useInventoryStore, formatPieces, Transaction, getStockLevel } from '../lib/store';
+import { useInventoryStore, formatPieces, Transaction, getStockLevel, getItemBatches } from '../lib/store';
 import { Users, ChevronDown, ChevronUp, PackageOpen, Calendar, Plus, X, Edit2, Trash2, Send, History } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
@@ -7,7 +7,7 @@ import { Button, Input, Select } from '../components/ui/Forms';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 export function ReceiversView() {
-  const { receivers, transactions, items, addReceiver, updateReceiver, deleteReceiver } = useInventoryStore();
+  const { receivers, transactions, items, addReceiver, updateReceiver, deleteReceiver, disbursementOrder } = useInventoryStore();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showDisburseForm, setShowDisburseForm] = useState(false);
@@ -129,14 +129,14 @@ export function ReceiversView() {
                              setShowDisburseForm(false);
                            }
                         }}
-                        className="flex-1 flex flex-col text-left focus:outline-none"
+                        className="flex-1 flex flex-col text-left focus:outline-none min-w-0 mr-2"
                         aria-expanded={isExpanded}
                       >
-                        <span className="font-bold text-gray-900 text-lg leading-tight">{receiver.name}</span>
+                        <span className="font-bold text-gray-900 text-lg leading-tight break-words">{receiver.name}</span>
                         <span className="text-xs text-gray-500 font-medium mt-0.5">{receiverTxs.length} Transactions</span>
                       </button>
                       
-                      <div className="flex items-center gap-1 -mt-1 -mr-1">
+                      <div className="flex items-center gap-1 -mt-1 -mr-1 flex-shrink-0">
                         <button onClick={() => setEditingReceiver(receiver.id)} className="p-2 text-gray-400 hover:text-blue-600 rounded-full hover:bg-blue-50 transition-colors">
                           <Edit2 className="w-4 h-4" />
                         </button>
@@ -183,14 +183,13 @@ export function ReceiversView() {
                     {showDisburseForm && (
                       <div className="bg-white border border-blue-200 rounded-lg p-3 mb-4 shadow-sm animate-in fade-in slide-in-from-top-2">
                         <h4 className="text-sm font-bold text-blue-800 mb-2">Disburse to {receiver.name}</h4>
-                        <form onSubmit={(e) => {
+                        <form onSubmit={async (e) => {
                           e.preventDefault();
                           const fd = new FormData(e.currentTarget);
                           const itemId = fd.get('itemId') as string;
                           const u = Number(fd.get('units')) || 0;
                           const p = Number(fd.get('pieces')) || 0;
                           const notes = fd.get('notes') as string;
-                          const batchNumber = fd.get('batchNumber') as string;
                           
                           const item = items.find(i => i.id === itemId);
                           if (!item) return;
@@ -204,15 +203,32 @@ export function ReceiversView() {
                             return;
                           }
                           
-                          useInventoryStore.getState().addTransaction({
-                            type: 'DISBURSE',
-                            itemId: item.id,
-                            receiverId: receiver.id,
-                            pieceQuantity: totalPieces,
-                            displayString: `${u ? u + ' ' + item.unitMeasurement : ''} ${p ? p + ' pcs' : ''}`.trim() || `${totalPieces} pcs`,
-                            notes,
-                            batchNumber: batchNumber || undefined
-                          });
+                          let availableBatches = getItemBatches(item.id, transactions).filter(b => b.remainingQty > 0);
+                          
+                          if (disbursementOrder === 'LIFO') {
+                            availableBatches = [...availableBatches].reverse();
+                          }
+                          
+                          let remainingToDisburse = totalPieces;
+                          
+                          // Process based on order
+                          for (const batch of availableBatches) {
+                            if (remainingToDisburse <= 0) break;
+                            
+                            const qtyToTake = Math.min(batch.remainingQty, remainingToDisburse);
+                            remainingToDisburse -= qtyToTake;
+                            
+                            useInventoryStore.getState().addTransaction({
+                              type: 'DISBURSE',
+                              itemId: item.id,
+                              receiverId: receiver.id,
+                              pieceQuantity: qtyToTake,
+                              displayString: formatPieces(qtyToTake, item.piecesPerUnit, item.unitMeasurement),
+                              notes,
+                              batchNumber: batch.batchNumber
+                            });
+                          }
+                          
                           setShowDisburseForm(false);
                         }} className="flex flex-col gap-3">
                           <Select name="itemId" label="Select Item" required>
@@ -230,7 +246,6 @@ export function ReceiversView() {
                             <Input name="units" type="number" min="0" label="Qty (Units)" placeholder="0" className="flex-1" />
                             <Input name="pieces" type="number" min="0" label="Pieces" placeholder="0" className="flex-1" />
                           </div>
-                          <Input name="batchNumber" label="Batch / Lot Number" placeholder="Optional" />
                           <Input name="notes" label="Notes" placeholder="Optional" />
                           <div className="flex gap-2 mt-1">
                             <Button type="button" variant="secondary" onClick={() => setShowDisburseForm(false)} className="flex-1">Cancel</Button>
@@ -258,17 +273,17 @@ export function ReceiversView() {
                               
                               return (
                                 <div key={tx.id} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm ml-2 relative before:absolute before:left-[-9px] before:top-1/2 before:w-2 before:h-[1px] before:bg-gray-200 border-l-2 border-l-gray-300">
-                                  <div className="flex justify-between items-start mb-1">
-                                    <span className="font-semibold text-gray-900">{item.name}</span>
-                                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded font-medium">
+                                  <div className="flex justify-between items-start mb-1 gap-2">
+                                    <span className="font-semibold text-gray-900 break-words min-w-0">{item.name}</span>
+                                    <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded font-medium whitespace-nowrap flex-shrink-0">
                                       {format(new Date(tx.date), 'h:mm a')}
                                     </span>
                                   </div>
-                                  <div className="flex justify-between items-end">
-                                    <span className="text-sm font-bold text-blue-600">
+                                  <div className="flex justify-between items-end gap-2">
+                                    <span className="text-sm font-bold text-blue-600 break-words min-w-0">
                                       {formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}
                                     </span>
-                                    {tx.notes && <span className="text-xs text-gray-500 italic">Note: {tx.notes}</span>}
+                                    {tx.notes && <span className="text-xs text-gray-500 italic text-right break-words min-w-0">Note: {tx.notes}</span>}
                                   </div>
                                 </div>
                               );

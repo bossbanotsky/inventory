@@ -168,20 +168,20 @@ export function HistoryView() {
                 </div>
                 
                 <div className="bg-gray-50 rounded-lg p-3 text-sm flex flex-col gap-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Item:</span>
-                    <span className={`font-semibold ${!item ? 'text-red-500 italic' : 'text-gray-900'}`}>{itemName}</span>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-600 flex-shrink-0">Item:</span>
+                    <span className={`font-semibold text-right break-words min-w-0 ${!item ? 'text-red-500 italic' : 'text-gray-900'}`}>{itemName}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Quantity:</span>
-                    <span className={`font-bold ${isReceive ? 'text-green-700' : isDisburse ? 'text-blue-700' : 'text-orange-700'}`}>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-600 flex-shrink-0">Quantity:</span>
+                    <span className={`font-bold text-right break-words min-w-0 ${isReceive ? 'text-green-700' : isDisburse ? 'text-blue-700' : 'text-orange-700'}`}>
                       {isReceive ? '+' : isDisburse ? '-' : ''} {formatPieces(tx.pieceQuantity, piecesPerUnit, unitMeasurement)}
                     </span>
                   </div>
                   {tx.batchNumber && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Batch:</span>
-                      <span className="font-semibold text-gray-700">{tx.batchNumber}</span>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-600 flex-shrink-0">Batch:</span>
+                      <span className="font-semibold text-gray-700 text-right break-words min-w-0">{tx.batchNumber}</span>
                     </div>
                   )}
                   {tx.notes && (

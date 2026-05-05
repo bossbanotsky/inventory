@@ -59,6 +59,8 @@ interface InventoryState {
     receiverId: string;
   };
   setHistoryFilters: (filters: Partial<{ type: string; itemId: string; receiverId: string }>) => void;
+  disbursementOrder: 'FIFO' | 'LIFO';
+  setDisbursementOrder: (order: 'FIFO' | 'LIFO') => void;
 }
 
 export const useInventoryStore = create<InventoryState>()((set) => ({
@@ -67,9 +69,11 @@ export const useInventoryStore = create<InventoryState>()((set) => ({
   transactions: [],
   activeTab: 'inventory',
   historyFilters: { type: 'ALL', itemId: 'ALL', receiverId: 'ALL' },
+  disbursementOrder: 'FIFO',
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setHistoryFilters: (filters) => set((state) => ({ historyFilters: { ...state.historyFilters, ...filters } })),
+  setDisbursementOrder: (order) => set({ disbursementOrder: order }),
 
   setItems: (items) => set({ items }),
   setReceivers: (receivers) => set({ receivers }),
