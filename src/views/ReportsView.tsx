@@ -191,6 +191,7 @@ export function ReportsView() {
                                       <span className="font-semibold text-blue-600 break-words min-w-0 text-right">-{formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}</span>
                                     </div>
                                     <span className="text-gray-400 break-words min-w-0">To: {getReceiverName(tx.receiverId)}</span>
+                                    {tx.receivedBy && <span className="text-gray-400 break-words min-w-0">Rcvd by: {tx.receivedBy}</span>}
                                     {tx.notes && <span className="italic break-words min-w-0">Note: {tx.notes}</span>}
                                   </div>
                                 ))}

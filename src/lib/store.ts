@@ -28,6 +28,7 @@ export type Transaction = {
   displayString: string;
   notes: string;
   batchNumber?: string;
+  receivedBy?: string;
 };
 
 interface InventoryState {

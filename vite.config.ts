@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+        includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'icon.svg'],
         manifest: {
           name: 'Inventory Tracker',
           short_name: 'Inventory',
@@ -28,6 +28,17 @@ export default defineConfig(({ mode }) => {
               src: 'pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png'
+            },
+            {
+              src: "pwa-64x64.png",
+              sizes: "64x64",
+              type: "image/png"
+            },
+            {
+              src: "maskable-icon-512x512.png",
+              sizes: "512x512",
+              type: "image/png",
+              purpose: "maskable"
             }
           ]
         }

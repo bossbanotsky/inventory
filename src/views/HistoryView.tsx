@@ -184,6 +184,12 @@ export function HistoryView() {
                       <span className="font-semibold text-gray-700 text-right break-words min-w-0">{tx.batchNumber}</span>
                     </div>
                   )}
+                  {tx.receivedBy && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-600 flex-shrink-0">Received by:</span>
+                      <span className="font-semibold text-gray-800 text-right break-words min-w-0">{tx.receivedBy}</span>
+                    </div>
+                  )}
                   {tx.notes && (
                     <div className="flex justify-between border-t border-gray-200 pt-1 mt-1">
                       <span className="text-gray-500 text-xs mt-0.5">Notes: {tx.notes}</span>

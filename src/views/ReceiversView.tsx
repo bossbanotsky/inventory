@@ -190,6 +190,7 @@ export function ReceiversView() {
                           const u = Number(fd.get('units')) || 0;
                           const p = Number(fd.get('pieces')) || 0;
                           const notes = fd.get('notes') as string;
+                          const receivedBy = fd.get('receivedBy') as string;
                           
                           const item = items.find(i => i.id === itemId);
                           if (!item) return;
@@ -225,7 +226,8 @@ export function ReceiversView() {
                               pieceQuantity: qtyToTake,
                               displayString: formatPieces(qtyToTake, item.piecesPerUnit, item.unitMeasurement),
                               notes,
-                              batchNumber: batch.batchNumber
+                              batchNumber: batch.batchNumber,
+                              receivedBy: receivedBy || undefined
                             });
                           }
                           
@@ -246,6 +248,7 @@ export function ReceiversView() {
                             <Input name="units" type="number" min="0" label="Qty (Units)" placeholder="0" className="flex-1" />
                             <Input name="pieces" type="number" min="0" label="Pieces" placeholder="0" className="flex-1" />
                           </div>
+                          <Input name="receivedBy" label="Received By" placeholder="Name of person receiving" />
                           <Input name="notes" label="Notes" placeholder="Optional" />
                           <div className="flex gap-2 mt-1">
                             <Button type="button" variant="secondary" onClick={() => setShowDisburseForm(false)} className="flex-1">Cancel</Button>
@@ -280,10 +283,13 @@ export function ReceiversView() {
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-end gap-2">
-                                    <span className="text-sm font-bold text-blue-600 break-words min-w-0">
+                                    <span className="text-sm font-bold text-blue-600 break-words min-w-0 flex-shrink-0">
                                       {formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}
                                     </span>
-                                    {tx.notes && <span className="text-xs text-gray-500 italic text-right break-words min-w-0">Note: {tx.notes}</span>}
+                                    <div className="flex flex-col items-end min-w-0">
+                                      {tx.receivedBy && <span className="text-xs text-blue-700 font-medium break-words">Rcvd by: {tx.receivedBy}</span>}
+                                      {tx.notes && <span className="text-xs text-gray-500 italic text-right break-words mt-0.5">Note: {tx.notes}</span>}
+                                    </div>
                                   </div>
                                 </div>
                               );

@@ -68,13 +68,28 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Inventory System</h1>
-        <p className="text-gray-600 mb-8 max-w-sm">Please sign in with your administrator account to access the inventory dashboard and manage disbursements.</p>
-        <button 
-          onClick={handleLogin}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-sm transition-colors active:scale-95"
-        >
-          Sign in with Google
-        </button>
+        <p className="text-gray-600 mb-8 max-w-sm">Please sign in or sign up to access the inventory dashboard and manage disbursements.</p>
+        <div className="flex flex-col gap-3 w-full max-w-sm">
+          <button 
+            onClick={handleLogin}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-sm transition-colors active:scale-95 w-full"
+          >
+            Sign in with Google
+          </button>
+          
+          <div className="relative flex items-center py-2">
+            <div className="flex-grow border-t border-gray-300"></div>
+            <span className="flex-shrink-0 mx-4 text-gray-500 text-sm font-medium pr-1">or</span>
+            <div className="flex-grow border-t border-gray-300"></div>
+          </div>
+          
+          <button 
+            onClick={handleLogin}
+            className="bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-semibold py-3 px-6 rounded-lg shadow-sm transition-colors active:scale-95 w-full"
+          >
+            Sign up with Google
+          </button>
+        </div>
       </div>
     );
   }
