@@ -176,7 +176,6 @@ export const getItemBatches = (itemId: string, transactions: Transaction[]): Bat
   const itemTxs = [...transactions].filter(t => t.itemId === itemId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   
   const batches: BatchInfo[] = [];
-  let pendingDeductions = 0;
 
   for (const tx of itemTxs) {
     if (tx.type === 'RECEIVE' || (tx.type === 'ADJUSTMENT' && tx.pieceQuantity > 0)) {
@@ -190,21 +189,41 @@ export const getItemBatches = (itemId: string, transactions: Transaction[]): Bat
         originalQty: tx.pieceQuantity,
         remainingQty: tx.pieceQuantity
       });
-    } else if (tx.type === 'DISBURSE') {
-      pendingDeductions += tx.pieceQuantity;
-    } else if (tx.type === 'ADJUSTMENT' && tx.pieceQuantity < 0) {
-      pendingDeductions += Math.abs(tx.pieceQuantity);
-    }
-  }
-
-  for (const batch of batches) {
-    if (pendingDeductions <= 0) break;
-    if (batch.remainingQty >= pendingDeductions) {
-      batch.remainingQty -= pendingDeductions;
-      pendingDeductions = 0;
-    } else {
-      pendingDeductions -= batch.remainingQty;
-      batch.remainingQty = 0;
+    } else if (tx.type === 'DISBURSE' || (tx.type === 'ADJUSTMENT' && tx.pieceQuantity < 0)) {
+      let deduction = tx.type === 'DISBURSE' ? tx.pieceQuantity : Math.abs(tx.pieceQuantity);
+      
+      if (tx.batchNumber) {
+        // Try to deduct from the specified batch first
+        for (const batch of batches) {
+          if (deduction <= 0) break;
+          // Exact match on batch number and it has remaining qty
+          if (batch.batchNumber === tx.batchNumber && batch.remainingQty > 0) {
+            if (batch.remainingQty >= deduction) {
+              batch.remainingQty -= deduction;
+              deduction = 0;
+            } else {
+              deduction -= batch.remainingQty;
+              batch.remainingQty = 0;
+            }
+          }
+        }
+      }
+      
+      // If no batch specified or specified batch didn't have enough, apply standard FIFO
+      if (deduction > 0) {
+        for (const batch of batches) {
+          if (deduction <= 0) break;
+          if (batch.remainingQty > 0) {
+            if (batch.remainingQty >= deduction) {
+              batch.remainingQty -= deduction;
+              deduction = 0;
+            } else {
+              deduction -= batch.remainingQty;
+              batch.remainingQty = 0;
+            }
+          }
+        }
+      }
     }
   }
 

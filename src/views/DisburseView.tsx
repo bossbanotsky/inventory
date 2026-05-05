@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useInventoryStore, formatPieces, getStockLevel, Item } from '../lib/store';
+import { useInventoryStore, formatPieces, getStockLevel, Item, getItemBatches } from '../lib/store';
 import { Button, Input, Select } from '../components/ui/Forms';
 import { Send, CheckCircle2, Calculator } from 'lucide-react';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -11,6 +11,7 @@ export function DisburseView() {
   const [selectedReceiver, setSelectedReceiver] = useState<string>('');
   const [units, setUnits] = useState<number | ''>('');
   const [pieces, setPieces] = useState<number | ''>('');
+  const [batchNumber, setBatchNumber] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -19,6 +20,7 @@ export function DisburseView() {
   const item = items.find(i => i.id === selectedItem);
   const receiver = receivers.find(r => r.id === selectedReceiver);
   const currentStock = item ? getStockLevel(item.id, transactions) : 0;
+  const availableBatches = item ? getItemBatches(item.id, transactions) : [];
   
   const u = Number(units) || 0;
   const p = Number(pieces) || 0;
@@ -27,6 +29,13 @@ export function DisburseView() {
   useEffect(() => {
     setUnits('');
     setPieces('');
+    const batches = item ? getItemBatches(item.id, transactions) : [];
+    if (batches.length > 0) {
+      setBatchNumber(batches[0].batchNumber);
+    } else {
+      setBatchNumber('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem]);
 
   useEffect(() => {
@@ -62,20 +71,27 @@ export function DisburseView() {
   const handleConfirm = () => {
     if (!item || !selectedReceiver) return;
 
-    addTransaction({
+    const newTx: any = {
       type: 'DISBURSE',
       itemId: item.id,
       receiverId: selectedReceiver,
       pieceQuantity: totalPieces,
       displayString: `${u ? u + ' ' + item.unitMeasurement : ''} ${p ? p + ' pcs' : ''}`.trim() || `${totalPieces} pcs`,
-      notes
-    });
+      notes,
+    };
+    
+    if (batchNumber) {
+      newTx.batchNumber = batchNumber;
+    }
+
+    addTransaction(newTx);
     
     setSuccessMsg(`Successfully disbursed ${formatPieces(totalPieces, item.piecesPerUnit, item.unitMeasurement)}!`);
     setSelectedItem('');
     setSelectedReceiver('');
     setUnits('');
     setPieces('');
+    setBatchNumber('');
     setNotes('');
     setShowConfirm(false);
   };
@@ -192,6 +208,29 @@ export function DisburseView() {
               </div>
             )}
           </div>
+        )}
+
+        {item && availableBatches.length > 0 ? (
+          <Select 
+            label="Batch / Lot Number" 
+            value={batchNumber}
+            onChange={e => setBatchNumber(e.target.value)}
+          >
+            <option value="">-- Apply Auto FIFO (Oldest First) --</option>
+            {availableBatches.map(b => (
+              <option key={b.id} value={b.batchNumber}>
+                {b.batchNumber} ({formatPieces(b.remainingQty, item.piecesPerUnit, item.unitMeasurement)} available)
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Input 
+            name="batchNumber" 
+            label="Batch / Lot Number" 
+            placeholder="Optional" 
+            value={batchNumber}
+            onChange={e => setBatchNumber(e.target.value)}
+          />
         )}
 
         <Input 
