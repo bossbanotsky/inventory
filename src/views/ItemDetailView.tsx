@@ -1,219 +1,200 @@
 import React from 'react';
-import { useInventoryStore, getStockLevel, formatPieces, getItemBatches } from '../lib/store';
-import { Button } from '../components/ui/Forms';
-import { ArrowLeft, Package, History, Layers, Info, Calendar, User, FileText, ChevronRight } from 'lucide-react';
-import { cn, formatDatePHT, formatDateTimePHT } from '../lib/utils';
+import { useInventoryStore, getStockLevel, formatPieces } from '../lib/store';
+import { ChevronLeft, Package, History, Layers, Calendar, User, AlertTriangle } from 'lucide-react';
+import { cn, formatDateTimePHT, formatDatePHT } from '../lib/utils';
 
 export function ItemDetailView() {
-  const { items, transactions, receivers, selectedItemId, setSelectedItemId, setActiveTab, setHistoryFilters } = useInventoryStore();
-  
+  const { items, transactions, selectedItemId } = useInventoryStore();
   const item = items.find(i => i.id === selectedItemId);
-  if (!item) {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center text-gray-500 space-y-4">
-        <Package className="w-12 h-12 text-gray-300" />
-        <p>Item not found.</p>
-        <Button onClick={() => setActiveTab('inventory')}>Back to Inventory</Button>
-      </div>
-    );
-  }
+
+  if (!item) return null;
 
   const stockPieces = getStockLevel(item.id, transactions, items);
-  const batches = getItemBatches(item.id, transactions).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const itemTxs = [...transactions]
-    .filter(t => t.itemId === item.id)
+  const isLowStock = item.lowStockThreshold !== undefined && item.lowStockThreshold > 0 && stockPieces <= item.lowStockThreshold;
+
+  const itemTxs = transactions
+    .filter(tx => tx.itemId === item.id)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const getReceiverName = (id: string | null) => {
-    if (!id) return 'Unknown';
-    return receivers.find(r => r.id === id)?.name || id;
-  };
+  // Group by batch for display
+  const batches = transactions
+    .filter(tx => tx.itemId === item.id && tx.type === 'RECEIVE')
+    .map(tx => {
+      const disbursementsForThisBatch = transactions
+        .filter(t => t.itemId === item.id && t.type === 'DISBURSE' && t.batchNumber === tx.batchNumber)
+        .reduce((sum, t) => sum + t.pieceQuantity, 0);
+      
+      return {
+        ...tx,
+        remainingQty: tx.pieceQuantity - disbursementsForThisBatch,
+        originalQty: tx.pieceQuantity
+      };
+    })
+    .filter(b => b.remainingQty > 0)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
-    <div className="flex flex-col gap-6 pb-24 pt-4 px-4 max-w-md mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col gap-8 w-full animate-in fade-in slide-in-from-bottom-2 duration-500 pb-24">
+      <div className="flex items-center gap-4 px-2">
         <button 
-          onClick={() => {
-            setSelectedItemId(null);
-            setActiveTab('inventory');
-          }}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-600"
+          onClick={() => useInventoryStore.getState().setActiveTab('inventory')}
+          className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm hover:bg-slate-50 transition-all"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ChevronLeft className="w-6 h-6 text-slate-400" />
         </button>
-        <h1 className="text-xl font-bold text-gray-900 truncate">{item.name}</h1>
-      </div>
-
-      {/* Summary Card */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden shrink-0">
-        <div className="bg-blue-600 p-5 text-white">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-blue-100 text-xs font-bold uppercase tracking-wider mb-1">Current Stock</p>
-              <h2 className="text-3xl font-black">{formatPieces(stockPieces, item.piecesPerUnit, item.unitMeasurement)}</h2>
-              <p className="text-blue-100 text-sm font-medium mt-1">{stockPieces} Total Pieces</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-xl backdrop-blur-sm">
-              <Package className="w-8 h-8 text-white" />
-            </div>
-          </div>
-        </div>
-        <div className="p-4 grid grid-cols-2 gap-4 bg-white">
-          <div className="space-y-1">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Base Unit</p>
-            <p className="font-bold text-gray-900">{item.unitMeasurement}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pieces per Unit</p>
-            <p className="font-bold text-gray-900">{item.piecesPerUnit}</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Threshold</p>
-            <p className={cn("font-bold", stockPieces <= (item.lowStockThreshold || 0) ? "text-red-600" : "text-gray-900")}>
-              {item.lowStockThreshold || 0} pcs
-            </p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Created</p>
-            <p className="font-bold text-gray-900 text-sm">{formatDatePHT(item.createdAt)}</p>
-          </div>
+        <div className="flex flex-col text-slate-900">
+          <h1 className="text-3xl font-black tracking-tighter text-slate-900 leading-none">{item.name}</h1>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Product Profile & Batch Analytics</p>
         </div>
       </div>
 
-      {/* Batches Section */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 px-1">
-          <Layers className="w-4 h-4 text-blue-600" />
-          <h3 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Active Batches</h3>
-          <span className="ml-auto text-[10px] font-bold text-gray-400">{batches.length} active</span>
-        </div>
-        
-        <div className="flex flex-col gap-2">
-          {batches.length === 0 ? (
-            <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-6 text-center text-gray-400 text-sm">
-              No active batches in stock
-            </div>
-          ) : (
-            batches.map(batch => (
-              <div key={batch.id} className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm flex justify-between items-center group">
-                <div className="flex flex-col min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-gray-900 truncate">{batch.batchNumber}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 font-medium mt-0.5">
-                    <Calendar className="w-3 h-3" />
-                    <span>{formatDatePHT(batch.date)}</span>
-                    <span className="mx-1">•</span>
-                    <span>Orig: {formatPieces(batch.originalQty, item.piecesPerUnit, item.unitMeasurement)}</span>
-                  </div>
-                </div>
-                <div className="text-right ml-3 shrink-0">
-                  <div className="text-sm font-black text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
-                    {formatPieces(batch.remainingQty, item.piecesPerUnit, item.unitMeasurement)}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      {/* Recent Activity Section */}
-      <section className="space-y-3">
-        <div className="flex justify-between items-center px-1">
-          <div className="flex items-center gap-2">
-            <History className="w-4 h-4 text-orange-500" />
-            <h3 className="font-bold text-gray-900 uppercase text-xs tracking-widest">Transaction History</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200/50 shadow-sm ring-1 ring-slate-900/5 flex flex-col items-center text-center">
+          <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center mb-4 shadow-lg shadow-slate-200">
+            <Package className="text-white w-6 h-6" strokeWidth={2.5} />
           </div>
-          <button 
-            onClick={() => {
-              setHistoryFilters({ itemId: item.id, type: 'ALL', receiverId: 'ALL' });
-              setActiveTab('history');
-            }}
-            className="text-blue-600 text-[10px] font-bold uppercase tracking-wider flex items-center hover:underline"
-          >
-            See All <ChevronRight className="w-3 h-3" />
-          </button>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Available Assets</span>
+          <span className="text-3xl font-black text-slate-900 tracking-tighter leading-none">{formatPieces(stockPieces, item.itemType, item.baseUnit, item.piecesPerUnit)}</span>
+          <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest mt-1.5">{stockPieces.toFixed(2)} Total {item.baseUnit}s</span>
+        </div>
+        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200/50 shadow-sm ring-1 ring-slate-900/5 flex flex-col items-center text-center">
+          <div className={cn(
+             "w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-lg",
+             isLowStock ? "bg-red-500 shadow-red-100" : "bg-blue-600 shadow-blue-100"
+          )}>
+            <AlertTriangle className="text-white w-6 h-6" strokeWidth={2.5} />
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Alert threshold</span>
+          <span className="text-3xl font-black text-slate-900 tracking-tighter leading-none">{item.lowStockThreshold || 0}</span>
+          <span className={cn(
+             "text-[10px] font-black uppercase tracking-widest mt-1",
+             isLowStock ? "text-red-500 animate-pulse" : "text-blue-600/60"
+          )}>
+            {isLowStock ? "Critical Alert" : "Stable Status"}
+          </span>
+        </div>
+      </div>
+
+      {(item.width || item.height || item.density || (item.itemType === 'LENGTH' && item.lengthPerUnit)) && (
+        <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-200/50 flex flex-col gap-4 mx-2">
+           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Physical Specifications</h3>
+           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {item.itemType === 'LENGTH' && item.lengthPerUnit && (
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase">Unit Length</span>
+                  <span className="font-black text-slate-900">{item.lengthPerUnit} m</span>
+                </div>
+              )}
+              {item.width && (
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase">Width</span>
+                  <span className="font-black text-slate-900">{item.width}</span>
+                </div>
+              )}
+              {item.height && (
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase">Height</span>
+                  <span className="font-black text-slate-900">{item.height}</span>
+                </div>
+              )}
+              {item.density && (
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase">Density</span>
+                  <span className="font-black text-slate-900">{item.density}</span>
+                </div>
+              )}
+           </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+            <h2 className="font-black text-slate-900 text-sm uppercase tracking-widest flex items-center gap-2">
+              <Layers className="w-4 h-4 text-slate-400" /> Traceable Batches
+            </h2>
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">FIFO Active</span>
         </div>
 
-        <div className="flex flex-col gap-2.5">
+        {batches.length === 0 ? (
+          <div className="text-center py-10 bg-white rounded-[2.5rem] border border-dashed border-slate-200 shadow-sm opacity-60">
+             <Layers className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No active batches detected</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+             {batches.map((batch, idx) => (
+               <div key={idx} className="bg-white p-6 rounded-[2rem] border border-slate-200/50 shadow-sm ring-1 ring-slate-900/5 flex justify-between items-center group hover:border-slate-300 transition-all">
+                  <div className="flex flex-col gap-1 pr-4">
+                     <span className="font-black text-slate-900 text-lg tracking-tighter uppercase">{batch.batchNumber || 'N/A'}</span>
+                     <div className="flex items-center gap-2">
+                        <Calendar className="w-3 h-3 text-slate-300" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">In: {formatDatePHT(batch.date)}</span>
+                     </div>
+                  </div>
+                  <div className="text-right flex flex-col items-end">
+                     <div className="font-black text-blue-700 bg-blue-50 px-4 py-2 rounded-xl border border-blue-100 shadow-sm">
+                       {formatPieces(batch.remainingQty, item.itemType, item.baseUnit, item.piecesPerUnit)}
+                     </div>
+                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1.5 opacity-60">
+                        Batch {idx + 1}
+                     </span>
+                  </div>
+               </div>
+             ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+            <h2 className="font-black text-slate-900 text-sm uppercase tracking-widest flex items-center gap-2">
+              <History className="w-4 h-4 text-slate-400" /> Operational Record
+            </h2>
+        </div>
+
+        <div className="flex flex-col gap-3">
           {itemTxs.length === 0 ? (
-            <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-6 text-center text-gray-400 text-sm">
-              No transactions yet
+            <div className="text-center py-10 bg-white rounded-[2.5rem] border border-dashed border-slate-200 shadow-sm opacity-60">
+               <History className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Journal is empty</p>
             </div>
           ) : (
-            itemTxs.slice(0, 10).map(tx => (
-              <div key={tx.id} className="bg-white rounded-xl border border-gray-100 p-3 shadow-sm hover:border-gray-300 transition-colors">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex flex-col">
+            itemTxs.map(tx => (
+              <div key={tx.id} className="bg-white p-5 rounded-2xl border border-slate-200/50 shadow-sm flex items-center justify-between group hover:bg-slate-50 transition-all border-l-4 border-l-slate-900">
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
                     <span className={cn(
-                      "text-[9px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-widest w-fit mb-1",
-                      tx.type === 'RECEIVE' ? "bg-green-100 text-green-700" : 
-                      tx.type === 'DISBURSE' ? "bg-blue-100 text-blue-700" : 
-                      "bg-yellow-100 text-yellow-700"
-                    )}>
-                      {tx.type}
-                    </span>
-                    <span className="text-xs text-gray-400 font-medium">
-                      {formatDateTimePHT(tx.date)}
-                    </span>
+                       "w-2 h-2 rounded-full",
+                       tx.type === 'RECEIVE' ? "bg-blue-600" : "bg-slate-900"
+                    )} />
+                    <span className="font-bold text-slate-900 text-sm tracking-tight">{tx.type} Log</span>
                   </div>
-                  <span className={cn("font-black text-sm", tx.type === 'RECEIVE' ? "text-green-600" : "text-blue-600")}>
-                    {tx.type === 'RECEIVE' ? '+' : '-'}{tx.pieceQuantity} pcs
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{formatDateTimePHT(tx.date)}</span>
+                    <div className="flex items-center gap-2 overflow-hidden">
+                       {tx.receivedBy && (
+                         <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 flex items-center gap-1 shrink-0">
+                            {tx.receivedBy}
+                         </span>
+                       )}
+                       {tx.notes && <span className="text-[10px] text-slate-500 italic truncate max-w-[120px]">“{tx.notes}”</span>}
+                    </div>
+                  </div>
                 </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2 text-xs text-gray-700">
-                    <Info className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                    <span className="font-semibold break-words">{tx.displayString}</span>
+                <div className="text-right ml-4 shrink-0">
+                  <div className={cn(
+                    "font-black text-md tracking-tighter leading-none px-3 py-1.5 rounded-xl border",
+                    tx.type === 'RECEIVE' ? "text-blue-700 bg-blue-50 border-blue-100" : "text-slate-900 bg-white border-slate-200"
+                  )}>
+                    {tx.type === 'RECEIVE' ? '+' : '-'} {formatPieces(tx.pieceQuantity, item.itemType, item.baseUnit, item.piecesPerUnit)}
                   </div>
-
-                  {tx.type === 'DISBURSE' && tx.receiverId && (
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                      <span className="truncate">To: <span className="font-bold text-gray-800">{getReceiverName(tx.receiverId)}</span></span>
-                    </div>
-                  )}
-
-                  {tx.receivedBy && (
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <User className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                      <span className="truncate">Rcvd by: <span className="font-bold text-blue-700">{tx.receivedBy}</span></span>
-                    </div>
-                  )}
-
-                  {tx.batchNumber && (
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <Layers className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                      <span className="truncate">Batch: <span className="font-mono font-bold text-gray-800">{tx.batchNumber}</span></span>
-                    </div>
-                  )}
-
-                  {tx.notes && (
-                    <div className="flex items-start gap-2 text-[11px] text-gray-500 bg-gray-50 p-2 rounded-lg mt-1">
-                      <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
-                      <span className="italic break-words">"{tx.notes}"</span>
-                    </div>
-                  )}
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1 block px-1">{tx.pieceQuantity.toFixed(2)} {item.baseUnit}(s)</span>
                 </div>
               </div>
             ))
           )}
-
-          {itemTxs.length > 10 && (
-            <button 
-              onClick={() => {
-                setHistoryFilters({ itemId: item.id, type: 'ALL', receiverId: 'ALL' });
-                setActiveTab('history');
-              }}
-              className="py-3 text-center text-xs font-bold text-gray-500 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors uppercase tracking-widest border border-dashed border-gray-200 mt-1"
-            >
-              View {itemTxs.length - 10} more transactions in history
-            </button>
-          )}
         </div>
-      </section>
+      </div>
     </div>
   );
 }

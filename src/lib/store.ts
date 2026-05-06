@@ -2,19 +2,74 @@ import { create } from 'zustand';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
 
+export type ItemType = 'COUNTABLE' | 'LENGTH' | 'WEIGHT' | 'VOLUME';
+
+export interface UOMDefinition {
+  name: string;
+  factor: number; // Factor to multiply by to get base unit
+  type: ItemType;
+}
+
+export const UOM_SYSTEM: Record<ItemType, { base: string; options: UOMDefinition[] }> = {
+  COUNTABLE: {
+    base: 'piece',
+    options: [
+      { name: 'piece', factor: 1, type: 'COUNTABLE' },
+      { name: 'box', factor: 12, type: 'COUNTABLE' },
+      { name: 'pack', factor: 6, type: 'COUNTABLE' },
+      { name: 'case', factor: 24, type: 'COUNTABLE' },
+    ]
+  },
+  LENGTH: {
+    base: 'meter',
+    options: [
+      { name: 'meter', factor: 1, type: 'LENGTH' },
+      { name: 'centimeter', factor: 0.01, type: 'LENGTH' },
+      { name: 'millimeter', factor: 0.001, type: 'LENGTH' },
+      { name: 'inch', factor: 0.0254, type: 'LENGTH' },
+      { name: 'foot', factor: 0.3048, type: 'LENGTH' },
+    ]
+  },
+  WEIGHT: {
+    base: 'kilogram',
+    options: [
+      { name: 'kilogram', factor: 1, type: 'WEIGHT' },
+      { name: 'gram', factor: 0.001, type: 'WEIGHT' },
+      { name: 'milligram', factor: 0.000001, type: 'WEIGHT' },
+      { name: 'pound', factor: 0.453592, type: 'WEIGHT' },
+      { name: 'ounce', factor: 0.0283495, type: 'WEIGHT' },
+    ]
+  },
+  VOLUME: {
+    base: 'liter',
+    options: [
+      { name: 'liter', factor: 1, type: 'VOLUME' },
+      { name: 'milliliter', factor: 0.001, type: 'VOLUME' },
+      { name: 'cubic meter', factor: 1000, type: 'VOLUME' },
+      { name: 'gallon', factor: 3.78541, type: 'VOLUME' },
+    ]
+  }
+};
+
 export type Item = {
   id: string;
   name: string;
-  unitMeasurement: string;
-  piecesPerUnit: number;
+  itemType: ItemType;
+  baseUnit: string;
+  piecesPerUnit: number; // Multiplier for custom 'box' size in countable
+  lengthPerUnit?: number;
+  width?: number;
+  height?: number;
+  density?: number;
   lowStockThreshold?: number;
   createdAt: number;
-  totalPieces: number; // Optimization: Store total pieces directly
+  totalPieces: number; // Stored in base units
 };
 
 export type Receiver = {
   id: string;
   name: string;
+  department?: string;
 };
 
 export type TransactionType = 'RECEIVE' | 'DISBURSE' | 'ADJUSTMENT';
@@ -25,7 +80,9 @@ export type Transaction = {
   type: TransactionType;
   itemId: string;
   receiverId: string | null;
-  pieceQuantity: number;
+  pieceQuantity: number; // Standardized (Base Unit)
+  inputQuantity: number; // User input value
+  inputUom: string;      // User input unit
   displayString: string;
   notes: string;
   batchNumber?: string;
@@ -211,32 +268,62 @@ export const getStockLevel = (itemId: string, transactions: Transaction[], items
     }, 0);
 };
 
-export const formatPieces = (pieces: number, piecesPerUnit: number, unitMeasurement: string) => {
-  const isBox = unitMeasurement.toLowerCase() === 'box' || unitMeasurement.toLowerCase() === 'boxes';
-  const unitLoc = isBox ? 'Box' : unitMeasurement;
-  const pluralUnit = isBox ? 'Boxes' : (unitLoc.endsWith('s') ? unitLoc : `${unitLoc}s`);
-
-  if (pieces === 0) {
-    return `0 ${pluralUnit}`;
+export const formatPieces = (pieces: number, itemType: ItemType, baseUnit: string, piecesPerUnit: number = 1) => {
+  if (itemType === 'COUNTABLE') {
+    if (pieces === 0) return `0 ${baseUnit}s`;
+    
+    // For countable, we still support the Box concept
+    if (piecesPerUnit > 1) {
+      const units = Math.floor(pieces / piecesPerUnit);
+      const remainder = pieces % piecesPerUnit;
+      let res = [];
+      if (units > 0) res.push(`${units} Box${units > 1 ? 'es' : ''}`);
+      if (remainder > 0) res.push(`${remainder} pc${remainder !== 1 ? 's' : ''}`);
+      return res.join(', ');
+    }
+    return `${pieces} ${pieces === 1 ? baseUnit : baseUnit + 's'}`;
   }
 
-  if (piecesPerUnit <= 1) {
-    return `${pieces} ${pieces === 1 ? unitLoc : pluralUnit}`;
+  // Purely physical units
+  if (itemType === 'LENGTH') {
+    if (pieces < 0.1) return `${(pieces * 100).toFixed(2)} cm`;
+    return `${pieces.toFixed(2)} m`;
+  }
+  if (itemType === 'WEIGHT') {
+    if (pieces < 0.1) return `${(pieces * 1000).toFixed(2)} g`;
+    return `${pieces.toFixed(2)} kg`;
+  }
+  if (itemType === 'VOLUME') {
+    if (pieces < 0.1) return `${(pieces * 1000).toFixed(2)} ml`;
+    return `${pieces.toFixed(2)} l`;
   }
 
-  const units = Math.floor(pieces / piecesPerUnit);
-  const remainder = pieces % piecesPerUnit;
-  let res = [];
+  return `${pieces} ${baseUnit}`;
+};
 
-  if (units > 0) {
-    res.push(`${units} ${units === 1 ? unitLoc : pluralUnit}`);
-  }
-  
-  if (remainder > 0) {
-    res.push(`${remainder} pc${remainder !== 1 ? 's' : ''}`);
+export const convertToBaseUnit = (quantity: number, uomName: string, itemType: ItemType, itemPiecesPerUnit: number = 1): number => {
+  const typeConfig = UOM_SYSTEM[itemType];
+  if (!typeConfig) return quantity;
+
+  // Handle Countable special case for 'box'
+  if (itemType === 'COUNTABLE' && uomName.toLowerCase() === 'box') {
+    return quantity * itemPiecesPerUnit;
   }
 
-  return res.join(', ');
+  const uom = typeConfig.options.find(o => o.name.toLowerCase() === uomName.toLowerCase());
+  return uom ? quantity * uom.factor : quantity;
+};
+
+export const convertFromBaseUnit = (quantity: number, targetUomName: string, itemType: ItemType, itemPiecesPerUnit: number = 1): number => {
+  const typeConfig = UOM_SYSTEM[itemType];
+  if (!typeConfig) return quantity;
+
+  if (itemType === 'COUNTABLE' && targetUomName.toLowerCase() === 'box') {
+    return quantity / itemPiecesPerUnit;
+  }
+
+  const uom = typeConfig.options.find(o => o.name.toLowerCase() === targetUomName.toLowerCase());
+  return uom ? quantity / uom.factor : quantity;
 };
 
 export interface BatchInfo {

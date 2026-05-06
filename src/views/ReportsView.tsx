@@ -1,235 +1,147 @@
-import React, { useState, useMemo } from 'react';
-import { useInventoryStore, formatPieces, Transaction } from '../lib/store';
-import { Select } from '../components/ui/Forms';
-import { TrendingUp, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
-import { cn, formatDatePHT, formatDateTimePHT, TIMEZONE_PHT } from '../lib/utils';
+import React, { useState } from 'react';
+import { useInventoryStore, formatPieces } from '../lib/store';
+import { BarChart3, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { cn, formatDateTimePHT } from '../lib/utils';
 
-type TimeFrame = 'DAILY' | 'WEEKLY' | 'MONTHLY';
-type ReportType = 'ALL' | 'RECEIVING' | 'RECEIVER';
+type Period = 'DAY' | 'WEEK' | 'MONTH';
 
 export function ReportsView() {
   const { transactions, items, receivers } = useInventoryStore();
-  
-  const [timeFrame, setTimeFrame] = useState<TimeFrame>('DAILY');
-  const [reportType, setReportType] = useState<ReportType>('ALL');
-  const [selectedReceiverId, setSelectedReceiverId] = useState<string>('ALL');
+  const [period, setPeriod] = useState<Period>('DAY');
 
-  const groupedData = useMemo(() => {
-    // 1. Filter Transactions based on ReportType
-    let filteredTxs = transactions;
+  const getFilteredTransactions = () => {
+    const now = new Date();
+    const startOfPeriod = new Date(now);
     
-    if (reportType === 'RECEIVING') {
-      filteredTxs = transactions.filter(tx => tx.type === 'RECEIVE');
-    } else if (reportType === 'RECEIVER') {
-      filteredTxs = transactions.filter(tx => tx.type === 'DISBURSE');
-      if (selectedReceiverId !== 'ALL') {
-        filteredTxs = filteredTxs.filter(tx => tx.receiverId === selectedReceiverId);
-      }
+    if (period === 'DAY') {
+      startOfPeriod.setHours(0, 0, 0, 0);
+    } else if (period === 'WEEK') {
+      const day = startOfPeriod.getDay();
+      const diff = startOfPeriod.getDate() - day + (day === 0 ? -6 : 1);
+      startOfPeriod.setDate(diff);
+      startOfPeriod.setHours(0, 0, 0, 0);
+    } else if (period === 'MONTH') {
+      startOfPeriod.setDate(1);
+      startOfPeriod.setHours(0, 0, 0, 0);
     }
 
-    // 2. Group by TimeFrame
-    const groups: Record<string, {
-      received: Record<string, { total: number, txs: Transaction[] }>;
-      disbursed: Record<string, { total: number, txs: Transaction[] }>;
-    }> = {};
+    return transactions.filter(tx => new Date(tx.date) >= startOfPeriod);
+  };
 
-    filteredTxs.forEach(tx => {
-      const date = new Date(tx.date);
-      let groupKey = '';
-      
-      if (timeFrame === 'DAILY') {
-        groupKey = formatDatePHT(date);
-      } else if (timeFrame === 'WEEKLY') {
-        // Calculate start of week in PHT
-        const d = new Date(date);
-        const day = d.getDay(); // 0 is Sunday
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start or keep Sunday? standard is Sunday usually.
-        // Let's use standard Intl for consistency
-        const startOfWeek = new Date(d.setDate(diff));
-        groupKey = `Week of ${formatDatePHT(startOfWeek)}`;
-      } else if (timeFrame === 'MONTHLY') {
-        groupKey = new Intl.DateTimeFormat('en-PH', { timeZone: TIMEZONE_PHT, month: 'long', year: 'numeric' }).format(date);
-      }
+  const filteredTxs = getFilteredTransactions();
+  
+  const summary = filteredTxs.reduce((acc, tx) => {
+    if (tx.type === 'RECEIVE') acc.received += tx.pieceQuantity;
+    if (tx.type === 'DISBURSE') acc.disbursed += tx.pieceQuantity;
+    return acc;
+  }, { received: 0, disbursed: 0 });
 
-      if (!groups[groupKey]) {
-        groups[groupKey] = { received: {}, disbursed: {} };
-      }
+  const getReceiverName = (id: string | null) => {
+    if (!id) return 'Unknown';
+    return receivers.find(r => r.id === id)?.name || 'Deleted Receiver';
+  };
 
-      if (tx.type === 'RECEIVE') {
-        if (!groups[groupKey].received[tx.itemId]) groups[groupKey].received[tx.itemId] = { total: 0, txs: [] };
-        groups[groupKey].received[tx.itemId].total += tx.pieceQuantity;
-        groups[groupKey].received[tx.itemId].txs.push(tx);
-      } else if (tx.type === 'DISBURSE') {
-        if (!groups[groupKey].disbursed[tx.itemId]) groups[groupKey].disbursed[tx.itemId] = { total: 0, txs: [] };
-        groups[groupKey].disbursed[tx.itemId].total += tx.pieceQuantity;
-        groups[groupKey].disbursed[tx.itemId].txs.push(tx);
-      }
-    });
-
-    return Object.entries(groups).map(([date, data]) => ({ date, ...data }));
-
-  }, [transactions, timeFrame, reportType, selectedReceiverId]);
-
-  const getItem = (id: string) => items.find(i => i.id === id);
-  const getReceiverName = (id: string | null) => receivers.find(r => r.id === id)?.name || 'Unknown';
+  const periodItems = items.map(item => {
+    const itemTxs = filteredTxs.filter(tx => tx.itemId === item.id);
+    return { ...item, transactions: itemTxs };
+  }).filter(item => item.transactions.length > 0);
 
   return (
-    <div className="flex flex-col gap-4 pb-20 pt-4 px-4 max-w-md mx-auto w-full">
-      <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Reports</h1>
+    <div className="flex flex-col gap-8 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="flex flex-col gap-1 px-2">
+        <h1 className="text-3xl font-black tracking-tight text-slate-900 leading-none">Intelligence</h1>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Analytics & Stock Reporting</p>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3">
-        <div className="flex bg-gray-100 p-1 rounded-lg">
-          {(['DAILY', 'WEEKLY', 'MONTHLY'] as TimeFrame[]).map((tf) => (
-            <button
-              key={tf}
-              onClick={() => setTimeFrame(tf)}
-              className={cn(
-                "flex-1 text-xs font-semibold py-2 rounded-md transition-all",
-                timeFrame === tf ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"
-              )}
-            >
-              {tf.charAt(0) + tf.slice(1).toLowerCase()}
-            </button>
-          ))}
-        </div>
-
-        <Select 
-          value={reportType} 
-          onChange={e => setReportType(e.target.value as ReportType)} 
-          label="Report Type"
-        >
-          <option value="ALL">All Transactions</option>
-          <option value="RECEIVING">Receiving Only</option>
-          <option value="RECEIVER">By Receiver</option>
-        </Select>
-
-        {reportType === 'RECEIVER' && (
-          <Select 
-            value={selectedReceiverId} 
-            onChange={e => setSelectedReceiverId(e.target.value)} 
-            label="Select Receiver"
+      <div className="bg-white p-1.5 rounded-2xl border border-slate-200/50 shadow-sm flex items-center gap-1.5 ring-1 ring-slate-900/5 text-slate-900">
+        {(['DAY', 'WEEK', 'MONTH'] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={cn(
+              "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300",
+              period === p ? "bg-slate-900 text-white shadow-xl shadow-slate-200" : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+            )}
           >
-            <option value="ALL">All Receivers</option>
-            {[...receivers].sort((a,b) => a.name.localeCompare(b.name)).map(r => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </Select>
-        )}
+            {p === 'DAY' ? 'Today' : p === 'WEEK' ? 'Weekly' : 'Monthly'}
+          </button>
+        ))}
       </div>
 
-      {groupedData.length === 0 ? (
-        <div className="text-center py-10 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-          <TrendingUp className="w-10 h-10 mx-auto text-gray-400 mb-2" />
-          No data available for this report.
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200/50 shadow-sm ring-1 ring-slate-900/5 flex flex-col items-center text-center">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
+            <ArrowDownLeft className="text-blue-600 w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Incoming Assets</span>
+          <span className="text-3xl font-black text-slate-900 tracking-tighter">{summary.received}</span>
+          <span className="text-[10px] font-bold text-blue-600/60 uppercase tracking-widest mt-1">Total Pieces</span>
         </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {groupedData.map(group => {
-            const hasReceived = Object.keys(group.received).length > 0;
-            const hasDisbursed = Object.keys(group.disbursed).length > 0;
-            
-            return (
-              <div key={group.date} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 font-semibold text-sm text-gray-700">
-                  {group.date}
-                </div>
-                
-                <div className="p-4 flex flex-col gap-4">
-                  {hasReceived && (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-1.5 text-green-700 font-medium text-xs uppercase tracking-wider">
-                        <ArrowDownLeft className="w-4 h-4" /> Received
-                      </div>
-                      <div className="grid gap-2">
-                        {Object.entries(group.received).map(([itemId, val]) => {
-                          const { total, txs } = val as { total: number, txs: Transaction[] };
-                          const item = getItem(itemId);
-                          if (!item) return null;
-                          return (
-                            <div key={itemId} className="flex flex-col border-b border-gray-100 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
-                              <div className="flex justify-between items-center text-sm mb-1 gap-2">
-                                <button
-                                  onClick={() => {
-                                    useInventoryStore.getState().setSelectedItemId(item.id);
-                                    useInventoryStore.getState().setActiveTab('itemDetail');
-                                  }}
-                                  className="text-gray-900 font-bold break-words min-w-0 hover:text-blue-600 hover:underline text-left"
-                                >
-                                  {item.name}
-                                </button>
-                                <span className="text-green-700 font-bold bg-green-50 px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">{formatPieces(total, item.piecesPerUnit, item.unitMeasurement)}</span>
-                              </div>
-                              <div className="flex flex-col gap-1 pl-2 border-l border-green-200 ml-1">
-                                {txs.map(tx => (
-                                  <div key={tx.id} className="text-xs flex flex-col gap-0.5 text-gray-500">
-                                    <div className="flex justify-between gap-2">
-                                      <span className="flex-shrink-0 whitespace-nowrap">{formatDateTimePHT(tx.date)}</span>
-                                      <span className="font-semibold text-green-600 break-words min-w-0 text-right">+{formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}</span>
-                                    </div>
-                                    {tx.batchNumber && <span className="text-gray-400 break-words min-w-0">Batch: {tx.batchNumber}</span>}
-                                    {tx.notes && <span className="italic break-words min-w-0">Note: {tx.notes}</span>}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+        <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200/50 shadow-sm ring-1 ring-slate-900/5 flex flex-col items-center text-center">
+          <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mb-4">
+            <ArrowUpRight className="text-slate-900 w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Stock Released</span>
+          <span className="text-3xl font-black text-slate-900 tracking-tighter">{summary.disbursed}</span>
+          <span className="text-[10px] font-bold text-slate-900/40 uppercase tracking-widest mt-1">Total Pieces</span>
+        </div>
+      </div>
 
-                  {hasDisbursed && (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-1.5 text-blue-700 font-medium text-xs uppercase tracking-wider">
-                        <ArrowUpRight className="w-4 h-4" /> Disbursed
-                      </div>
-                      <div className="grid gap-2">
-                        {Object.entries(group.disbursed).map(([itemId, val]) => {
-                          const { total, txs } = val as { total: number, txs: Transaction[] };
-                          const item = getItem(itemId);
-                          if (!item) return null;
-                          return (
-                            <div key={itemId} className="flex flex-col border-b border-gray-100 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
-                              <div className="flex justify-between items-center text-sm mb-1 gap-2">
-                                <button
-                                  onClick={() => {
-                                    useInventoryStore.getState().setSelectedItemId(item.id);
-                                    useInventoryStore.getState().setActiveTab('itemDetail');
-                                  }}
-                                  className="text-gray-900 font-bold break-words min-w-0 hover:text-blue-600 hover:underline text-left"
-                                >
-                                  {item.name}
-                                </button>
-                                <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">{formatPieces(total, item.piecesPerUnit, item.unitMeasurement)}</span>
-                              </div>
-                              <div className="flex flex-col gap-1 pl-2 border-l border-blue-200 ml-1">
-                                {txs.map(tx => (
-                                  <div key={tx.id} className="text-xs flex flex-col gap-0.5 text-gray-500">
-                                    <div className="flex justify-between gap-2">
-                                      <span className="flex-shrink-0 whitespace-nowrap">{formatDateTimePHT(tx.date)}</span>
-                                      <span className="font-semibold text-blue-600 break-words min-w-0 text-right">-{formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}</span>
-                                    </div>
-                                    <span className="text-gray-400 break-words min-w-0">To: {getReceiverName(tx.receiverId)}</span>
-                                    {tx.batchNumber && <span className="text-gray-400 font-bold break-words min-w-0">Batch: {tx.batchNumber}</span>}
-                                    {tx.receivedBy && <span className="text-gray-400 break-words min-w-0">Rcvd by: {tx.receivedBy}</span>}
-                                    {tx.notes && <span className="italic break-words min-w-0">Note: {tx.notes}</span>}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-2">
+            <h2 className="font-black text-slate-900 text-sm uppercase tracking-widest">Movement Log</h2>
+            <div className="h-0.5 flex-1 mx-4 bg-slate-100 rounded-full" />
+        </div>
+        
+        {periodItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-16 text-center space-y-4 bg-white rounded-[3rem] border border-dashed border-slate-200 shadow-sm opacity-60">
+             <BarChart3 className="w-12 h-12 text-slate-200" />
+             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No activity in this period</p>
+          </div>
+        ) : (
+          periodItems.map(item => (
+            <div key={item.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-200/50 shadow-sm ring-1 ring-slate-900/5 transition-all hover:shadow-xl hover:border-slate-300/50">
+              <div className="flex justify-between items-start mb-6">
+                <div className="space-y-1">
+                  <h3 className="font-black text-xl text-slate-900 tracking-tight leading-tight">{item.name}</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.itemType} • {item.baseUnit}</p>
+                </div>
+                <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">{item.transactions.length} Ops</span>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+
+              <div className="space-y-3">
+                {item.transactions.map(tx => (
+                  <div key={tx.id} className="flex justify-between items-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50 group hover:bg-white hover:border-slate-200 transition-all">
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                           "w-2 h-2 rounded-full shrink-0",
+                           tx.type === 'RECEIVE' ? "bg-blue-600" : "bg-slate-900"
+                        )} />
+                        <span className="text-[10px] font-bold text-slate-400">{formatDateTimePHT(tx.date)}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-600 mt-1 truncate">
+                        {tx.receiverId ? `To: ${getReceiverName(tx.receiverId)}` : `Manifest: ${tx.batchNumber || 'N/A'}`}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-end shrink-0 ml-4">
+                      <span className={cn(
+                         "font-black text-sm tracking-tight",
+                         tx.type === 'RECEIVE' ? "text-blue-600" : "text-slate-900"
+                      )}>
+                        {tx.type === 'RECEIVE' ? '+' : '-'} {formatPieces(tx.pieceQuantity, item.itemType, item.baseUnit, item.piecesPerUnit)}
+                      </span>
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">{tx.pieceQuantity.toFixed(2)} {item.baseUnit}(s)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

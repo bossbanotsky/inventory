@@ -7,7 +7,7 @@ export default [
   {
     files: ['**/*.rules'],
     plugins: {
-      firebase: firebaseRulesPlugin
+      '@firebase/security-rules': firebaseRulesPlugin
     },
     rules: {
       ...firebaseRulesPlugin.configs.recommended.rules

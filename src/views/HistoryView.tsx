@@ -1,210 +1,156 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useInventoryStore, formatPieces } from '../lib/store';
-import { ArrowDownLeft, ArrowUpRight, Trash2, Filter } from 'lucide-react';
-import { Button, Select, Input } from '../components/ui/Forms';
+import { Select } from '../components/ui/Forms';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import { formatDateTimePHT } from '../lib/utils';
+import { History, ArrowDownLeft, ArrowUpRight, RefreshCcw, Users } from 'lucide-react';
+import { cn, formatDateTimePHT } from '../lib/utils';
 
 export function HistoryView() {
-  const { transactions, items, receivers, deleteTransaction, historyFilters, setHistoryFilters } = useInventoryStore();
-  const [deleteDialog, setDeleteDialog] = useState<{isOpen: boolean, id: string}>({ isOpen: false, id: '' });
-  
-  // Use en-CA for YYYY-MM-DD format, locked to Manila timezone
-  const getTodayPHT = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
-  
-  const today = getTodayPHT();
-  const [startDate, setStartDate] = useState<string>(today);
-  const [endDate, setEndDate] = useState<string>(today);
-  const [showFilters, setShowFilters] = useState(historyFilters.itemId !== 'ALL' || historyFilters.receiverId !== 'ALL' || historyFilters.type !== 'ALL');
+  const { transactions, items, receivers, deleteTransaction, historyFilters: filters, setHistoryFilters: setFilters } = useInventoryStore();
+  const [deleteDialog, setDeleteDialog] = React.useState<{isOpen: boolean, id: string}>({ isOpen: false, id: '' });
 
-  const getItem = (id: string) => items.find(i => i.id === id);
-  const getReceiverName = (id: string | null) => receivers.find(r => r.id === id)?.name || 'Unknown';
-
-  const filteredTransactions = transactions.filter(tx => {
-    if (historyFilters.type !== 'ALL' && tx.type !== historyFilters.type) return false;
-    if (historyFilters.itemId !== 'ALL' && tx.itemId !== historyFilters.itemId) return false;
-    if (historyFilters.receiverId !== 'ALL' && tx.receiverId !== historyFilters.receiverId) return false;
-    
-    if (startDate || endDate) {
-      // Get the transaction date in YYYY-MM-DD format as seen in Manila
-      const txDatePHT = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(tx.date));
-      
-      if (startDate && txDatePHT < startDate) return false;
-      if (endDate && txDatePHT > endDate) return false;
-    }
-
-    return true;
-  });
+  const filteredTransactions = transactions
+    .filter(tx => {
+      const matchItem = filters.itemId === 'ALL' || tx.itemId === filters.itemId;
+      const matchReceiver = filters.receiverId === 'ALL' || tx.receiverId === filters.receiverId;
+      const matchType = filters.type === 'ALL' || tx.type === filters.type;
+      return matchItem && matchReceiver && matchType;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
-    <div className="flex flex-col gap-4 pb-20 pt-4 px-4 max-w-md mx-auto w-full">
+    <div className="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
         title="Delete Transaction"
-        message="Are you sure you want to delete this transaction? This will automatically recalculate total stock items."
-        confirmText="Delete"
+        message="Are you sure you want to delete this transaction record? This will revert the stock levels for the associated item. This action cannot be undone."
+        confirmText="Permanently Delete"
         onConfirm={() => {
           deleteTransaction(deleteDialog.id);
           setDeleteDialog({ isOpen: false, id: '' });
         }}
         onCancel={() => setDeleteDialog({ isOpen: false, id: '' })}
       />
+      
+      <div className="flex flex-col gap-1 px-2">
+        <h1 className="text-3xl font-black tracking-tight text-slate-900 leading-none">Journal</h1>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Audit Trail & Activity Log</p>
+      </div>
 
-      <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Audit History</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={() => setShowFilters(!showFilters)} className="h-8 px-2 text-blue-700 bg-blue-50 hover:bg-blue-100">
-            <Filter className="w-4 h-4 mr-1" /> Filters
-          </Button>
-          <span className="text-xs font-semibold text-gray-500 bg-gray-200 px-2 py-1 rounded-full">{filteredTransactions.length} records</span>
+      <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200/50 shadow-[0_15px_40px_-5px_rgba(0,0,0,0.04)] ring-1 ring-slate-900/5 space-y-5">
+        <div className="grid grid-cols-2 gap-4">
+          <Select 
+            label="Product Filter"
+            value={filters.itemId}
+            onChange={(e) => setFilters({ ...filters, itemId: e.target.value })}
+            className="rounded-xl h-12 text-sm font-bold"
+          >
+            <option value="ALL">All Products</option>
+            {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+          </Select>
+
+          <Select 
+            label="Partner Filter"
+            value={filters.receiverId}
+            onChange={(e) => setFilters({ ...filters, receiverId: e.target.value })}
+            className="rounded-xl h-12 text-sm font-bold"
+          >
+            <option value="ALL">All Partners</option>
+            {receivers.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </Select>
+        </div>
+
+        <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+          {(['ALL', 'RECEIVE', 'DISBURSE', 'ADJUSTMENT'] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => setFilters({ ...filters, type })}
+              className={cn(
+                "flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all duration-300",
+                filters.type === type ? "bg-slate-900 text-white shadow-lg" : "text-slate-400 hover:text-slate-600"
+              )}
+            >
+              {type === 'ALL' ? 'Total' : type === 'RECEIVE' ? 'In' : type === 'DISBURSE' ? 'Out' : 'Adj'}
+            </button>
+          ))}
         </div>
       </div>
 
-      {showFilters && (
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3 mb-2 animate-in fade-in slide-in-from-top-2">
-          <Select 
-            value={historyFilters.type} 
-            onChange={e => setHistoryFilters({ type: e.target.value })} 
-            label="Transaction Type"
-          >
-            <option value="ALL">All Types</option>
-            <option value="RECEIVE">Receive</option>
-            <option value="DISBURSE">Disburse</option>
-            <option value="ADJUSTMENT">Adjustment</option>
-          </Select>
-          <Select 
-            value={historyFilters.itemId} 
-            onChange={e => setHistoryFilters({ itemId: e.target.value })} 
-            label="Item"
-          >
-            <option value="ALL">All Items</option>
-            {items.map(item => (
-              <option key={item.id} value={item.id}>{item.name}</option>
-            ))}
-          </Select>
-          <Select 
-            value={historyFilters.receiverId} 
-            onChange={e => setHistoryFilters({ receiverId: e.target.value })} 
-            label="Receiver"
-          >
-            <option value="ALL">All Receivers</option>
-            {[...receivers].sort((a, b) => a.name.localeCompare(b.name)).map(r => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </Select>
-          
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <Input 
-                type="date"
-                label="From Date"
-                value={startDate} 
-                onChange={e => setStartDate(e.target.value)}
-              />
-            </div>
-            <div className="flex-1">
-              <Input 
-                type="date"
-                label="To Date"
-                value={endDate} 
-                onChange={e => setEndDate(e.target.value)}
-              />
-            </div>
+      <div className="flex flex-col gap-3">
+        {filteredTransactions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-16 text-center space-y-4 bg-white rounded-[3rem] border border-dashed border-slate-200 shadow-sm opacity-60">
+             <div className="w-16 h-16 rounded-3xl bg-slate-50 flex items-center justify-center">
+               <History className="w-8 h-8 text-slate-300" />
+             </div>
+             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No activities found</p>
           </div>
-
-          {(historyFilters.type !== 'ALL' || historyFilters.itemId !== 'ALL' || historyFilters.receiverId !== 'ALL' || startDate !== today || endDate !== today) && (
-             <Button variant="secondary" onClick={() => { setHistoryFilters({ type: 'ALL', itemId: 'ALL', receiverId: 'ALL' }); setStartDate(today); setEndDate(today); }} className="h-9 w-full mt-1">
-               Clear Filters
-             </Button>
-          )}
-        </div>
-      )}
-
-      {filteredTransactions.length === 0 ? (
-        <div className="text-center py-10 text-gray-500">
-          {transactions.length === 0 ? "No transactions recorded yet." : "No transactions match the selected filters."}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {filteredTransactions.map(tx => {
-            const item = getItem(tx.itemId);
+        ) : (
+          filteredTransactions.map(tx => {
+            const item = items.find(i => i.id === tx.itemId);
+            const receiver = receivers.find(r => r.id === tx.receiverId);
             const isReceive = tx.type === 'RECEIVE';
             const isDisburse = tx.type === 'DISBURSE';
-            const isAdjust = tx.type === 'ADJUSTMENT';
             
-            const itemName = item?.name || '(Deleted Item)';
-            const piecesPerUnit = item?.piecesPerUnit || 1;
-            const unitMeasurement = item?.unitMeasurement || 'pcs';
-
             return (
-              <div key={tx.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2">
-                    <div className={`p-1.5 rounded-md ${isReceive ? 'bg-green-100 text-green-700' : isDisburse ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-                      {isReceive ? <ArrowDownLeft className="w-4 h-4"/> : isDisburse ? <ArrowUpRight className="w-4 h-4" /> : <Filter className="w-4 h-4"/>}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-gray-900">
-                        {isReceive ? 'Stock Incoming' : isDisburse ? 'Issued to ' + getReceiverName(tx.receiverId) : 'Inventory Adjustment'}
-                      </h3>
-                      <p className="text-xs text-gray-500">{formatDateTimePHT(tx.date)}</p>
-                    </div>
+              <div key={tx.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm flex items-center justify-between group transition-all hover:shadow-2xl hover:shadow-slate-200/50 hover:border-slate-300 ring-1 ring-slate-900/5">
+                <div className="flex items-center gap-5 flex-1 min-w-0">
+                  <div className={cn(
+                    "w-14 h-14 rounded-3xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 shrink-0",
+                    isReceive ? "bg-blue-600 shadow-blue-100" : isDisburse ? "bg-slate-900 shadow-slate-200" : "bg-orange-500 shadow-orange-100"
+                  )}>
+                    {isReceive ? <ArrowDownLeft className="text-white w-7 h-7" /> : isDisburse ? <ArrowUpRight className="text-white w-7 h-7" /> : <RefreshCcw className="text-white w-7 h-7" />}
                   </div>
                   
+                  <div className="flex flex-col min-w-0 text-slate-900">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="font-black text-slate-900 text-xl tracking-tight truncate leading-none">{item?.name || 'Deleted Product'}</span>
+                      {tx.batchNumber && (
+                        <span className="text-[10px] font-black bg-slate-900 text-white px-2 py-0.5 rounded-lg uppercase tracking-widest">#{tx.batchNumber}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500 font-bold uppercase tracking-widest">
+                       <span className="text-slate-900">{formatDateTimePHT(tx.date)}</span>
+                       <span className="opacity-30">•</span>
+                       <span className={cn(
+                         "px-1.5 py-0.5 rounded font-black",
+                         isReceive ? "text-blue-600 bg-blue-50" : isDisburse ? "text-slate-900 bg-slate-100" : "text-orange-600 bg-orange-50"
+                       )}>
+                         {tx.type}
+                       </span>
+                    </div>
+                    {receiver && (
+                      <span className="text-[11px] font-black text-slate-700 mt-2.5 flex items-center gap-1.5 bg-slate-100 self-start px-3 py-1 rounded-xl border border-slate-200/50">
+                        <Users className="w-3.5 h-3.5 text-slate-400" /> {receiver.name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-right flex flex-col items-end shrink-0 ml-4">
+                  <div className={cn(
+                    "font-black text-2xl tracking-tighter leading-none px-4 py-2.5 rounded-2xl border transition-all shadow-sm",
+                    isReceive ? "text-blue-700 bg-blue-50 border-blue-200" : isDisburse ? "text-slate-900 bg-slate-100 border-slate-300" : "text-orange-700 bg-orange-50 border-orange-200"
+                  )}>
+                    {isReceive ? '+' : isDisburse ? '-' : ''}
+                    {item ? formatPieces(tx.pieceQuantity, item.itemType, item.baseUnit, item.piecesPerUnit) : tx.displayString}
+                  </div>
+                  {item && (
+                    <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest mt-2 block px-1">
+                      {tx.pieceQuantity.toFixed(2)} Total {item.baseUnit}s
+                    </span>
+                  )}
                   <button 
                     onClick={() => setDeleteDialog({ isOpen: true, id: tx.id })}
-                    className="text-gray-400 hover:text-red-600 p-1 rounded-md transition-colors"
-                    title="Delete transaction"
+                    className="p-1 px-2 text-[9px] font-black text-red-500/50 hover:text-red-600 hover:bg-red-50 rounded-lg mt-3 transition-all uppercase tracking-widest"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    Remove Log
                   </button>
-                </div>
-                
-                <div className="bg-gray-50 rounded-lg p-3 text-sm flex flex-col gap-1">
-                  <div className="flex justify-between gap-3">
-                    <span className="text-gray-600 flex-shrink-0">Item:</span>
-                    <button 
-                      onClick={() => {
-                        if (item) {
-                          useInventoryStore.getState().setSelectedItemId(item.id);
-                          useInventoryStore.getState().setActiveTab('itemDetail');
-                        }
-                      }}
-                      disabled={!item}
-                      className={`font-semibold text-right break-words min-w-0 ${!item ? 'text-red-500 italic' : 'text-blue-600 hover:underline'}`}
-                    >
-                      {itemName}
-                    </button>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <span className="text-gray-600 flex-shrink-0">Quantity:</span>
-                    <span className={`font-bold text-right break-words min-w-0 ${isReceive ? 'text-green-700' : isDisburse ? 'text-blue-700' : 'text-orange-700'}`}>
-                      {isReceive ? '+' : isDisburse ? '-' : ''} {formatPieces(tx.pieceQuantity, piecesPerUnit, unitMeasurement)}
-                    </span>
-                  </div>
-                  {tx.batchNumber && (
-                    <div className="flex justify-between gap-3">
-                      <span className="text-gray-600 flex-shrink-0">Batch:</span>
-                      <span className="font-semibold text-gray-700 text-right break-words min-w-0">{tx.batchNumber}</span>
-                    </div>
-                  )}
-                  {tx.receivedBy && (
-                    <div className="flex justify-between gap-3">
-                      <span className="text-gray-600 flex-shrink-0">Received by:</span>
-                      <span className="font-semibold text-gray-800 text-right break-words min-w-0">{tx.receivedBy}</span>
-                    </div>
-                  )}
-                  {tx.notes && (
-                    <div className="flex justify-between border-t border-gray-200 pt-1 mt-1">
-                      <span className="text-gray-500 text-xs mt-0.5">Notes: {tx.notes}</span>
-                    </div>
-                  )}
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
     </div>
   );
 }
