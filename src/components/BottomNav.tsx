@@ -2,7 +2,7 @@ import React from 'react';
 import { Package, Send, Users, History, TrendingUp } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-export type TabType = 'inventory' | 'receivers' | 'history' | 'reports';
+export type TabType = 'inventory' | 'receivers' | 'history' | 'reports' | 'itemDetail';
 
 interface BottomNavProps {
   currentTab: TabType;
@@ -22,7 +22,7 @@ export function BottomNav({ currentTab, onChangeTab }: BottomNavProps) {
       <div className="flex justify-between w-full max-w-md mx-auto items-center h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          const isActive = currentTab === tab.id;
+          const isActive = currentTab === tab.id || (currentTab === 'itemDetail' && tab.id === 'inventory');
           return (
             <button
               key={tab.id}

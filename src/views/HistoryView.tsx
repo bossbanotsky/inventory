@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { useInventoryStore, formatPieces } from '../lib/store';
-import { format } from 'date-fns';
 import { ArrowDownLeft, ArrowUpRight, Trash2, Filter } from 'lucide-react';
 import { Button, Select, Input } from '../components/ui/Forms';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { formatDateTimePHT } from '../lib/utils';
 
 export function HistoryView() {
   const { transactions, items, receivers, deleteTransaction, historyFilters, setHistoryFilters } = useInventoryStore();
   const [deleteDialog, setDeleteDialog] = useState<{isOpen: boolean, id: string}>({ isOpen: false, id: '' });
   
-  const today = new Date().toISOString().split('T')[0];
+  // Use en-CA for YYYY-MM-DD format, locked to Manila timezone
+  const getTodayPHT = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+  
+  const today = getTodayPHT();
   const [startDate, setStartDate] = useState<string>(today);
   const [endDate, setEndDate] = useState<string>(today);
   const [showFilters, setShowFilters] = useState(historyFilters.itemId !== 'ALL' || historyFilters.receiverId !== 'ALL' || historyFilters.type !== 'ALL');
@@ -23,21 +26,11 @@ export function HistoryView() {
     if (historyFilters.receiverId !== 'ALL' && tx.receiverId !== historyFilters.receiverId) return false;
     
     if (startDate || endDate) {
-      const txDate = new Date(tx.date);
-      // Reset hours to compare dates properly
-      txDate.setHours(0, 0, 0, 0);
+      // Get the transaction date in YYYY-MM-DD format as seen in Manila
+      const txDatePHT = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(tx.date));
       
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        if (txDate < start) return false;
-      }
-      
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(0, 0, 0, 0);
-        if (txDate > end) return false;
-      }
+      if (startDate && txDatePHT < startDate) return false;
+      if (endDate && txDatePHT > endDate) return false;
     }
 
     return true;
@@ -154,7 +147,7 @@ export function HistoryView() {
                       <h3 className="font-bold text-gray-900">
                         {isReceive ? 'Stock Incoming' : isDisburse ? 'Issued to ' + getReceiverName(tx.receiverId) : 'Inventory Adjustment'}
                       </h3>
-                      <p className="text-xs text-gray-500">{format(new Date(tx.date), 'MMM d, yyyy - h:mm a')}</p>
+                      <p className="text-xs text-gray-500">{formatDateTimePHT(tx.date)}</p>
                     </div>
                   </div>
                   
@@ -170,7 +163,18 @@ export function HistoryView() {
                 <div className="bg-gray-50 rounded-lg p-3 text-sm flex flex-col gap-1">
                   <div className="flex justify-between gap-3">
                     <span className="text-gray-600 flex-shrink-0">Item:</span>
-                    <span className={`font-semibold text-right break-words min-w-0 ${!item ? 'text-red-500 italic' : 'text-gray-900'}`}>{itemName}</span>
+                    <button 
+                      onClick={() => {
+                        if (item) {
+                          useInventoryStore.getState().setSelectedItemId(item.id);
+                          useInventoryStore.getState().setActiveTab('itemDetail');
+                        }
+                      }}
+                      disabled={!item}
+                      className={`font-semibold text-right break-words min-w-0 ${!item ? 'text-red-500 italic' : 'text-blue-600 hover:underline'}`}
+                    >
+                      {itemName}
+                    </button>
                   </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-gray-600 flex-shrink-0">Quantity:</span>

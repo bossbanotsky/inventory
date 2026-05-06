@@ -5,6 +5,7 @@ import { InventoryView } from './views/InventoryView';
 import { ReceiversView } from './views/ReceiversView';
 import { HistoryView } from './views/HistoryView';
 import { ReportsView } from './views/ReportsView';
+import { ItemDetailView } from './views/ItemDetailView';
 import { auth } from './lib/firebase';
 import { signOut } from 'firebase/auth';
 import { LogOut } from 'lucide-react';
@@ -39,6 +40,7 @@ export default function App() {
         {currentTab === 'receivers' && <ReceiversView />}
         {currentTab === 'history' && <HistoryView />}
         {currentTab === 'reports' && <ReportsView />}
+        {currentTab === 'itemDetail' && <ItemDetailView />}
       </main>
       
       <BottomNav currentTab={currentTab} onChangeTab={setCurrentTab} />

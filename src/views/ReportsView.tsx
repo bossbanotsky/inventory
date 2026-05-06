@@ -1,9 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useInventoryStore, formatPieces, Transaction } from '../lib/store';
-import { format, startOfDay, startOfWeek, startOfMonth, parseISO } from 'date-fns';
 import { Select } from '../components/ui/Forms';
-import { TrendingUp, ArrowDownLeft, ArrowUpRight, Users, Package } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { TrendingUp, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { cn, formatDatePHT, formatDateTimePHT, TIMEZONE_PHT } from '../lib/utils';
 
 type TimeFrame = 'DAILY' | 'WEEKLY' | 'MONTHLY';
 type ReportType = 'ALL' | 'RECEIVING' | 'RECEIVER';
@@ -35,15 +34,21 @@ export function ReportsView() {
     }> = {};
 
     filteredTxs.forEach(tx => {
-      const date = parseISO(tx.date);
+      const date = new Date(tx.date);
       let groupKey = '';
       
       if (timeFrame === 'DAILY') {
-        groupKey = format(startOfDay(date), 'MMM d, yyyy');
+        groupKey = formatDatePHT(date);
       } else if (timeFrame === 'WEEKLY') {
-        groupKey = `Week of ${format(startOfWeek(date), 'MMM d, yyyy')}`;
+        // Calculate start of week in PHT
+        const d = new Date(date);
+        const day = d.getDay(); // 0 is Sunday
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start or keep Sunday? standard is Sunday usually.
+        // Let's use standard Intl for consistency
+        const startOfWeek = new Date(d.setDate(diff));
+        groupKey = `Week of ${formatDatePHT(startOfWeek)}`;
       } else if (timeFrame === 'MONTHLY') {
-        groupKey = format(startOfMonth(date), 'MMMM yyyy');
+        groupKey = new Intl.DateTimeFormat('en-PH', { timeZone: TIMEZONE_PHT, month: 'long', year: 'numeric' }).format(date);
       }
 
       if (!groups[groupKey]) {
@@ -145,14 +150,22 @@ export function ReportsView() {
                           return (
                             <div key={itemId} className="flex flex-col border-b border-gray-100 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
                               <div className="flex justify-between items-center text-sm mb-1 gap-2">
-                                <span className="text-gray-900 font-bold break-words min-w-0">{item.name}</span>
+                                <button
+                                  onClick={() => {
+                                    useInventoryStore.getState().setSelectedItemId(item.id);
+                                    useInventoryStore.getState().setActiveTab('itemDetail');
+                                  }}
+                                  className="text-gray-900 font-bold break-words min-w-0 hover:text-blue-600 hover:underline text-left"
+                                >
+                                  {item.name}
+                                </button>
                                 <span className="text-green-700 font-bold bg-green-50 px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">{formatPieces(total, item.piecesPerUnit, item.unitMeasurement)}</span>
                               </div>
                               <div className="flex flex-col gap-1 pl-2 border-l border-green-200 ml-1">
                                 {txs.map(tx => (
                                   <div key={tx.id} className="text-xs flex flex-col gap-0.5 text-gray-500">
                                     <div className="flex justify-between gap-2">
-                                      <span className="flex-shrink-0 whitespace-nowrap">{format(parseISO(tx.date), 'MMM d, h:mm a')}</span>
+                                      <span className="flex-shrink-0 whitespace-nowrap">{formatDateTimePHT(tx.date)}</span>
                                       <span className="font-semibold text-green-600 break-words min-w-0 text-right">+{formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}</span>
                                     </div>
                                     {tx.batchNumber && <span className="text-gray-400 break-words min-w-0">Batch: {tx.batchNumber}</span>}
@@ -180,17 +193,26 @@ export function ReportsView() {
                           return (
                             <div key={itemId} className="flex flex-col border-b border-gray-100 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
                               <div className="flex justify-between items-center text-sm mb-1 gap-2">
-                                <span className="text-gray-900 font-bold break-words min-w-0">{item.name}</span>
+                                <button
+                                  onClick={() => {
+                                    useInventoryStore.getState().setSelectedItemId(item.id);
+                                    useInventoryStore.getState().setActiveTab('itemDetail');
+                                  }}
+                                  className="text-gray-900 font-bold break-words min-w-0 hover:text-blue-600 hover:underline text-left"
+                                >
+                                  {item.name}
+                                </button>
                                 <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">{formatPieces(total, item.piecesPerUnit, item.unitMeasurement)}</span>
                               </div>
                               <div className="flex flex-col gap-1 pl-2 border-l border-blue-200 ml-1">
                                 {txs.map(tx => (
                                   <div key={tx.id} className="text-xs flex flex-col gap-0.5 text-gray-500">
                                     <div className="flex justify-between gap-2">
-                                      <span className="flex-shrink-0 whitespace-nowrap">{format(parseISO(tx.date), 'MMM d, h:mm a')}</span>
+                                      <span className="flex-shrink-0 whitespace-nowrap">{formatDateTimePHT(tx.date)}</span>
                                       <span className="font-semibold text-blue-600 break-words min-w-0 text-right">-{formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}</span>
                                     </div>
                                     <span className="text-gray-400 break-words min-w-0">To: {getReceiverName(tx.receiverId)}</span>
+                                    {tx.batchNumber && <span className="text-gray-400 font-bold break-words min-w-0">Batch: {tx.batchNumber}</span>}
                                     {tx.receivedBy && <span className="text-gray-400 break-words min-w-0">Rcvd by: {tx.receivedBy}</span>}
                                     {tx.notes && <span className="italic break-words min-w-0">Note: {tx.notes}</span>}
                                   </div>

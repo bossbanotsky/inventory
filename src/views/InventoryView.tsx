@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { useInventoryStore, getStockLevel, formatPieces, getItemBatches } from '../lib/store';
 import { Button, Input } from '../components/ui/Forms';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import { PackagePlus, Plus, X, Search, Edit2, Trash2, Calculator, AlertTriangle } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { PackagePlus, Plus, X, Search, Edit2, Trash2, Calculator, AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
+import { cn, formatDatePHT } from '../lib/utils';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { collection, query, where, getDocs, writeBatch, doc } from 'firebase/firestore';
 
 export function InventoryView() {
   const { items, transactions, addItem, addTransaction, updateItem, deleteItem, disbursementOrder, setDisbursementOrder } = useInventoryStore();
   const [showAddForm, setShowAddForm] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
   const [showReceiveForm, setShowReceiveForm] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [expandedBatches, setExpandedBatches] = useState<string | null>(null);
@@ -20,6 +23,39 @@ export function InventoryView() {
   const filteredItems = items.filter(item => 
     item.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleRecalculateStock = async () => {
+    if (!confirm('This will scan all transactions to update stock levels. Continue?')) return;
+    setIsRecalculating(true);
+    try {
+      // 1. Fetch EVERYTHING (One-time intensive operation)
+      const txSnap = await getDocs(collection(db, 'transactions'));
+      const allTx: any[] = [];
+      txSnap.forEach(d => allTx.push({ id: d.id, ...d.data() }));
+
+      const batch = writeBatch(db);
+      
+      items.forEach(item => {
+        const stock = allTx
+          .filter(t => t.itemId === item.id)
+          .reduce((acc, tx) => {
+            if (tx.type === 'RECEIVE') return acc + tx.pieceQuantity;
+            if (tx.type === 'DISBURSE') return acc - tx.pieceQuantity;
+            if (tx.type === 'ADJUSTMENT') return acc + tx.pieceQuantity;
+            return acc;
+          }, 0);
+        
+        batch.update(doc(db, 'items', item.id), { totalPieces: stock });
+      });
+
+      await batch.commit();
+      alert('Stock levels synchronized successfully!');
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, 'items_bulk');
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 pb-20 pt-4 px-4 max-w-md mx-auto w-full">
@@ -59,6 +95,24 @@ export function InventoryView() {
             LIFO
           </button>
         </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl mb-2 flex items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center gap-2 text-blue-800">
+          <RefreshCw className={cn("w-4 h-4", isRecalculating && "animate-spin")} />
+          <div className="flex flex-col">
+             <span className="text-xs font-bold leading-tight">Optimization Enabled</span>
+             <span className="text-[10px] opacity-70">Stock is now tracked atomically.</span>
+          </div>
+        </div>
+        <Button 
+          variant="secondary" 
+          disabled={isRecalculating}
+          onClick={handleRecalculateStock}
+          className="h-8 py-0 px-2 text-[10px] bg-white border-blue-200 text-blue-700 hover:bg-blue-50 font-bold uppercase tracking-wider"
+        >
+          {isRecalculating ? 'Syncing...' : 'Force Sync Stock'}
+        </Button>
       </div>
 
       {items.length > 0 && !showAddForm && (
@@ -119,7 +173,7 @@ export function InventoryView() {
       ) : (
         <div className="flex flex-col gap-3">
           {filteredItems.map(item => {
-            const stockPieces = getStockLevel(item.id, transactions);
+            const stockPieces = getStockLevel(item.id, transactions, items);
             const isReceiving = showReceiveForm === item.id;
             const isLowStock = item.lowStockThreshold !== undefined && item.lowStockThreshold > 0 && stockPieces <= item.lowStockThreshold;
             
@@ -160,7 +214,15 @@ export function InventoryView() {
                       <div className="flex justify-between items-start gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-extrabold text-xl sm:text-2xl text-gray-900 leading-tight break-words">{item.name}</h3>
+                            <h3 
+                              className="font-extrabold text-xl sm:text-2xl text-gray-900 leading-tight break-words cursor-pointer hover:text-blue-600 transition-colors"
+                              onClick={() => {
+                                useInventoryStore.getState().setSelectedItemId(item.id);
+                                useInventoryStore.getState().setActiveTab('itemDetail');
+                              }}
+                            >
+                              {item.name}
+                            </h3>
                             {isLowStock && (
                               <span className="flex items-center gap-1 bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider">
                                 <AlertTriangle className="w-3 h-3" />
@@ -168,6 +230,16 @@ export function InventoryView() {
                               </span>
                             )}
                             <div className="flex text-gray-400 flex-shrink-0 ml-auto">
+                               <button 
+                                onClick={() => {
+                                  useInventoryStore.getState().setSelectedItemId(item.id);
+                                  useInventoryStore.getState().setActiveTab('itemDetail');
+                                }}
+                                className="p-1 hover:text-blue-600 rounded"
+                                title="View Details"
+                              >
+                                <ChevronRight className="w-5 h-5" />
+                              </button>
                               <button onClick={() => setEditingItem(item.id)} className="p-1 hover:text-blue-600 rounded">
                                 <Edit2 className="w-4 h-4" />
                               </button>
@@ -308,7 +380,7 @@ export function InventoryView() {
 
                           <div className="flex gap-2">
                             <div className="flex-1">
-                              <Input name="receiveDate" type="date" label="Receive Date" defaultValue={new Date().toLocaleDateString('en-CA')} />
+                              <Input name="receiveDate" type="date" label="Receive Date" defaultValue={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date())} />
                             </div>
                             <div className="flex-1">
                               <Input name="batchNumber" label="Batch / Lot Number" placeholder={`e.g. ${item.name.substring(0, 2).toUpperCase()}-0001`} />
@@ -357,7 +429,7 @@ export function InventoryView() {
                                   <div key={batch.id} className="flex justify-between items-center bg-white p-2 border border-gray-200 rounded shadow-sm mb-1 gap-2">
                                     <div className="flex flex-col flex-1 min-w-0">
                                       <span className="font-bold text-gray-800 text-sm break-words">{batch.batchNumber}</span>
-                                      <span className="text-xs text-gray-500 whitespace-nowrap">Rcvd: {new Date(batch.date).toLocaleDateString()}</span>
+                                      <span className="text-xs text-gray-500 whitespace-nowrap">Rcvd: {formatDatePHT(batch.date)}</span>
                                       <span className="text-xs text-gray-500 truncate">Orig: {formatPieces(batch.originalQty, item.piecesPerUnit, item.unitMeasurement)}</span>
                                     </div>
                                     <div className="flex flex-col items-end gap-0.5 flex-shrink-0">

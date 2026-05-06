@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useInventoryStore, formatPieces, Transaction, getStockLevel, getItemBatches } from '../lib/store';
 import { Users, ChevronDown, ChevronUp, PackageOpen, Calendar, Plus, X, Edit2, Trash2, Send, History } from 'lucide-react';
-import { cn } from '../lib/utils';
-import { format } from 'date-fns';
+import { cn, formatDatePHT, formatTimePHT } from '../lib/utils';
 import { Button, Input, Select } from '../components/ui/Forms';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
@@ -22,7 +21,7 @@ export function ReceiversView() {
 
   const groupTransactionsByDay = (txs: Transaction[]) => {
     const grouped = txs.reduce((acc, tx) => {
-      const dateStr = format(new Date(tx.date), 'MMM d, yyyy');
+      const dateStr = formatDatePHT(tx.date);
       if (!acc[dateStr]) acc[dateStr] = [];
       acc[dateStr].push(tx);
       return acc;
@@ -198,7 +197,7 @@ export function ReceiversView() {
                           const totalPieces = (u * item.piecesPerUnit) + p;
                           if (totalPieces <= 0) return;
                           
-                          const stock = getStockLevel(item.id, transactions);
+                          const stock = getStockLevel(item.id, transactions, items);
                           if (totalPieces > stock) {
                             alert(`Insufficient stock. You only have ${stock} pieces available.`);
                             return;
@@ -236,7 +235,7 @@ export function ReceiversView() {
                           <Select name="itemId" label="Select Item" required>
                             <option value="">-- Choose Item --</option>
                             {items.map(i => {
-                               const stock = getStockLevel(i.id, transactions);
+                               const stock = getStockLevel(i.id, transactions, items);
                                return (
                                  <option key={i.id} value={i.id} disabled={stock === 0}>
                                    {i.name} ({stock > 0 ? formatPieces(stock, i.piecesPerUnit, i.unitMeasurement) : 'Out of stock'})
@@ -279,7 +278,7 @@ export function ReceiversView() {
                                   <div className="flex justify-between items-start mb-1 gap-2">
                                     <span className="font-semibold text-gray-900 break-words min-w-0">{item.name}</span>
                                     <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded font-medium whitespace-nowrap flex-shrink-0">
-                                      {format(new Date(tx.date), 'h:mm a')}
+                                      {formatTimePHT(tx.date)}
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-end gap-2">
@@ -287,8 +286,9 @@ export function ReceiversView() {
                                       {formatPieces(tx.pieceQuantity, item.piecesPerUnit, item.unitMeasurement)}
                                     </span>
                                     <div className="flex flex-col items-end min-w-0">
-                                      {tx.receivedBy && <span className="text-xs text-blue-700 font-medium break-words">Rcvd by: {tx.receivedBy}</span>}
-                                      {tx.notes && <span className="text-xs text-gray-500 italic text-right break-words mt-0.5">Note: {tx.notes}</span>}
+                                      {tx.batchNumber && <span className="text-[10px] text-gray-700 font-bold break-words bg-gray-100 px-1 rounded-sm mb-0.5">Batch: {tx.batchNumber}</span>}
+                                      {tx.receivedBy && <span className="text-[11px] text-blue-700 font-bold break-words">Rcvd by: {tx.receivedBy}</span>}
+                                      {tx.notes && <span className="text-[10px] text-gray-500 italic text-right break-words mt-0.5 leading-tight">Note: {tx.notes}</span>}
                                     </div>
                                   </div>
                                 </div>

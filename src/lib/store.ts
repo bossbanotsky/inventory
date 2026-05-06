@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { db, handleFirestoreError, OperationType } from './firebase';
-import { collection, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, deleteDoc, increment } from 'firebase/firestore';
 
 export type Item = {
   id: string;
@@ -9,6 +9,7 @@ export type Item = {
   piecesPerUnit: number;
   lowStockThreshold?: number;
   createdAt: number;
+  totalPieces: number; // Optimization: Store total pieces directly
 };
 
 export type Receiver = {
@@ -39,7 +40,7 @@ interface InventoryState {
   setReceivers: (receivers: Receiver[]) => void;
   setTransactions: (transactions: Transaction[]) => void;
   
-  addItem: (item: Omit<Item, 'id' | 'createdAt'>) => Promise<void>;
+  addItem: (item: Omit<Item, 'id' | 'createdAt' | 'totalPieces'>) => Promise<void>;
   updateItem: (id: string, updated: Partial<Item>) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   
@@ -52,8 +53,10 @@ interface InventoryState {
   deleteReceiver: (id: string) => Promise<void>;
 
   // UI state
-  activeTab: 'inventory' | 'receivers' | 'history' | 'reports';
-  setActiveTab: (tab: 'inventory' | 'receivers' | 'history' | 'reports') => void;
+  activeTab: 'inventory' | 'receivers' | 'history' | 'reports' | 'itemDetail';
+  setActiveTab: (tab: 'inventory' | 'receivers' | 'history' | 'reports' | 'itemDetail') => void;
+  selectedItemId: string | null;
+  setSelectedItemId: (id: string | null) => void;
   historyFilters: {
     type: string;
     itemId: string;
@@ -69,10 +72,12 @@ export const useInventoryStore = create<InventoryState>()((set) => ({
   receivers: [],
   transactions: [],
   activeTab: 'inventory',
+  selectedItemId: null,
   historyFilters: { type: 'ALL', itemId: 'ALL', receiverId: 'ALL' },
   disbursementOrder: 'FIFO',
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setSelectedItemId: (id) => set({ selectedItemId: id }),
   setHistoryFilters: (filters) => set((state) => ({ historyFilters: { ...state.historyFilters, ...filters } })),
   setDisbursementOrder: (order) => set({ disbursementOrder: order }),
 
@@ -83,7 +88,11 @@ export const useInventoryStore = create<InventoryState>()((set) => ({
   addItem: async (item) => {
     try {
       const ref = doc(collection(db, 'items'));
-      await setDoc(ref, { ...item, createdAt: Date.now() });
+      await setDoc(ref, { 
+        ...item, 
+        totalPieces: 0, // Initialize with 0
+        createdAt: Date.now() 
+      });
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'items');
     }
@@ -108,7 +117,19 @@ export const useInventoryStore = create<InventoryState>()((set) => ({
   addTransaction: async (tx) => {
     try {
       const ref = doc(collection(db, 'transactions'));
-      await setDoc(ref, { ...tx, date: tx.date || new Date().toISOString() });
+      const date = tx.date || new Date().toISOString();
+      await setDoc(ref, { ...tx, date });
+
+      // Atomic Update Item Stock
+      const itemRef = doc(db, 'items', tx.itemId);
+      let diff = tx.pieceQuantity;
+      if (tx.type === 'DISBURSE') diff = -Math.abs(tx.pieceQuantity);
+      if (tx.type === 'RECEIVE') diff = Math.abs(tx.pieceQuantity);
+      // Adjustment already signed appropriately usually, but let's be safe if needed
+      
+      await updateDoc(itemRef, {
+        totalPieces: increment(diff)
+      });
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'transactions');
     }
@@ -124,7 +145,22 @@ export const useInventoryStore = create<InventoryState>()((set) => ({
 
   deleteTransaction: async (id) => {
     try {
+      const state = useInventoryStore.getState();
+      const tx = state.transactions.find(t => t.id === id);
+      
       await deleteDoc(doc(db, 'transactions', id));
+
+      // Revert Stock if transaction existed
+      if (tx) {
+        const itemRef = doc(db, 'items', tx.itemId);
+        let diff = -tx.pieceQuantity;
+        if (tx.type === 'DISBURSE') diff = Math.abs(tx.pieceQuantity);
+        if (tx.type === 'RECEIVE') diff = -Math.abs(tx.pieceQuantity);
+        
+        await updateDoc(itemRef, {
+          totalPieces: increment(diff)
+        });
+      }
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, `transactions/${id}`);
     }
@@ -157,13 +193,20 @@ export const useInventoryStore = create<InventoryState>()((set) => ({
 }));
 
 // Helpers to get derived data
-export const getStockLevel = (itemId: string, transactions: Transaction[]) => {
+export const getStockLevel = (itemId: string, transactions: Transaction[], items?: Item[]) => {
+  // If we have items passed in, use the stored totalPieces for speed and accuracy (handling limited transactions sync)
+  if (items) {
+    const item = items.find(i => i.id === itemId);
+    if (item && item.totalPieces !== undefined) return item.totalPieces;
+  }
+
+  // Fallback to calculation if totalPieces not available or items not passed
   return transactions
     .filter((tx) => tx.itemId === itemId)
     .reduce((acc, tx) => {
       if (tx.type === 'RECEIVE') return acc + tx.pieceQuantity;
       if (tx.type === 'DISBURSE') return acc - tx.pieceQuantity;
-      if (tx.type === 'ADJUSTMENT') return acc + tx.pieceQuantity; // can be + or -
+      if (tx.type === 'ADJUSTMENT') return acc + tx.pieceQuantity;
       return acc;
     }, 0);
 };
