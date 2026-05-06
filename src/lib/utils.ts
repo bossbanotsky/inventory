@@ -28,3 +28,22 @@ export function formatTimePHT(date: string | number | Date) {
     timeStyle: 'short',
   }).format(new Date(date));
 }
+
+export function incrementBatchNumber(lastBatch: string): string {
+  // Regex to find the last sequence of digits in the string
+  const match = lastBatch.match(/(.*?)(\d+)([^\d]*)$/);
+  
+  if (!match) {
+    // If no numbers found, append -1 (or -2 if we assume the input was the first one)
+    return `${lastBatch}-02`;
+  }
+
+  const prefix = match[1];
+  const digits = match[2];
+  const suffix = match[3];
+  
+  const nextNumber = (parseInt(digits, 10) + 1).toString();
+  const paddedNumber = nextNumber.padStart(digits.length, '0');
+  
+  return `${prefix}${paddedNumber}${suffix}`;
+}

@@ -3,7 +3,7 @@ import { useInventoryStore, getStockLevel, formatPieces, UOM_SYSTEM, ItemType, c
 import { Button, Input, Select } from '../components/ui/Forms';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { PackagePlus, Plus, X, Search, Edit2, Trash2, AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, incrementBatchNumber } from '../lib/utils';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
 
@@ -19,6 +19,7 @@ export function InventoryView() {
   const [receiveQuantity, setReceiveQuantity] = useState<number | ''>('');
   const [receiveLoose, setReceiveLoose] = useState<number | ''>('');
   const [receiveUom, setReceiveUom] = useState('');
+  const [receiveBatchNumber, setReceiveBatchNumber] = useState('');
   const [newItemType, setNewItemType] = useState<ItemType>('COUNTABLE');
 
   const filteredItems = items.filter(item => 
@@ -71,15 +72,38 @@ export function InventoryView() {
         onCancel={() => setDeleteDialog({ isOpen: false, id: '', name: '' })}
       />
 
-      <div className="flex items-end justify-between px-2">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Inventory</h1>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Universal Asset Control</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-end justify-between px-2">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-none">Inventory</h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Universal Asset Control</p>
+          </div>
+          <Button onClick={() => setShowAddForm(true)} variant="secondary" className="px-3 gap-2 h-9 rounded-xl">
+            <Plus className="w-3.5 h-3.5" strokeWidth={3} />
+            <span className="text-[9px] uppercase tracking-widest font-black">New Product</span>
+          </Button>
         </div>
-        <Button onClick={() => setShowAddForm(true)} variant="secondary" className="px-3 gap-2 h-9 rounded-xl">
-          <Plus className="w-3.5 h-3.5" strokeWidth={3} />
-          <span className="text-[9px] uppercase tracking-widest font-black">New Product</span>
-        </Button>
+
+        <div className="flex gap-2 px-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input 
+              type="text"
+              placeholder="Search products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none transition-all shadow-sm"
+            />
+          </div>
+          <button 
+             onClick={handleRecalculateStock}
+             disabled={isRecalculating}
+             className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-slate-900 shadow-sm transition-all"
+             title="Recalculate Stock"
+          >
+            <RefreshCw className={cn("w-4 h-4", isRecalculating && "animate-spin")} />
+          </button>
+        </div>
       </div>
 
       <div className="bg-white p-1.5 rounded-2xl border border-slate-200/60 shadow-sm flex items-center gap-1.5 ring-1 ring-slate-900/5">
@@ -299,6 +323,19 @@ export function InventoryView() {
                                 onClick={() => {
                                   setReceiveQuantity('');
                                   setReceiveUom(item.baseUnit);
+                                  
+                                  // Logic for smart batch numbering
+                                  const itemTransactions = transactions
+                                    .filter(t => t.itemId === item.id && t.type === 'RECEIVE' && t.batchNumber)
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                  
+                                  if (itemTransactions.length > 0) {
+                                    const lastBatch = itemTransactions[0].batchNumber!;
+                                    setReceiveBatchNumber(incrementBatchNumber(lastBatch));
+                                  } else {
+                                    setReceiveBatchNumber('');
+                                  }
+                                  
                                   setShowReceiveForm(item.id);
                                 }}
                               >
@@ -338,10 +375,7 @@ export function InventoryView() {
                               
                               if (standardizedPieces <= 0) return;
 
-                              if (!batchNumber) {
-                                 const prefix = item.name.substring(0, 2).toUpperCase();
-                                 batchNumber = `${prefix}-${Date.now().toString().slice(-4)}`;
-                              }
+                              const finalBatchNumber = receiveBatchNumber || `${item.name.substring(0, 2).toUpperCase()}-${Date.now().toString().slice(-4)}`;
                               
                               let finalDate = new Date().toISOString();
                               if (receiveDateStr) {
@@ -362,11 +396,12 @@ export function InventoryView() {
                                   ? `Received ${qty} ${uom} & ${loose} ${item.baseUnit}${loose !== 1 ? 's' : ''}`
                                   : `Received ${qty} ${uom}`,
                                 notes: supplierName ? `From ${supplierName} | ${notes}` : notes,
-                                batchNumber,
+                                batchNumber: finalBatchNumber,
                                 date: finalDate
                               });
                               setShowReceiveForm(null);
                               setReceiveLoose('');
+                              setReceiveBatchNumber('');
                             }}
                             className="flex flex-col gap-6"
                           >
@@ -374,7 +409,7 @@ export function InventoryView() {
                               <span className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
                                 <PackagePlus className="w-4 h-4"/> Incoming Manifest
                               </span>
-                              <button type="button" onClick={() => setShowReceiveForm(null)} className="text-blue-100 hover:text-white p-1">
+                              <button type="button" onClick={() => { setShowReceiveForm(null); setReceiveBatchNumber(''); }} className="text-blue-100 hover:text-white p-1">
                                 <X className="w-4 h-4"/>
                               </button>
                             </div>
@@ -423,14 +458,21 @@ export function InventoryView() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <Input name="receiveDate" type="date" label="Arrival Date" defaultValue={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date())} />
-                                <Input name="batchNumber" label="Traceability ID" placeholder="AUTO-GENERATE" />
+                                <Input 
+                                  name="batchNumber" 
+                                  label="Traceability ID (Batch #)" 
+                                  placeholder="e.g. Kag-0001" 
+                                  value={receiveBatchNumber}
+                                  onChange={(e) => setReceiveBatchNumber(e.target.value)}
+                                  required
+                                />
                             </div>
                             
                             <Input name="supplierName" label="Entity Source" placeholder="Internal or External Partner ID" />
                             <Input name="notes" label="Audit Remarks" placeholder="Specific handling or PO references..." />
 
                             <div className="flex gap-3 pt-2">
-                              <Button type="button" variant="ghost" onClick={() => setShowReceiveForm(null)} className="flex-1 rounded-xl h-12 font-black text-[10px] uppercase text-slate-400 tracking-widest">Abort</Button>
+                              <Button type="button" variant="ghost" onClick={() => { setShowReceiveForm(null); setReceiveBatchNumber(''); }} className="flex-1 rounded-xl h-12 font-black text-[10px] uppercase text-slate-400 tracking-widest">Abort</Button>
                               <Button type="submit" variant="secondary" className="flex-[2] rounded-xl h-12 text-sm font-black shadow-lg shadow-blue-100">Commit to Warehouse</Button>
                             </div>
                           </form>

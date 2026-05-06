@@ -1,20 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useInventoryStore, formatPieces } from '../lib/store';
 import { Select } from '../components/ui/Forms';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import { History, ArrowDownLeft, ArrowUpRight, RefreshCcw, Users } from 'lucide-react';
+import { History, ArrowDownLeft, ArrowUpRight, RefreshCcw, Users, Search } from 'lucide-react';
 import { cn, formatDateTimePHT } from '../lib/utils';
 
 export function HistoryView() {
   const { transactions, items, receivers, deleteTransaction, historyFilters: filters, setHistoryFilters: setFilters } = useInventoryStore();
   const [deleteDialog, setDeleteDialog] = React.useState<{isOpen: boolean, id: string}>({ isOpen: false, id: '' });
+  const [searchQuery, setSearchQuery] = useState('');
 
   const filteredTransactions = transactions
     .filter(tx => {
+      const item = items.find(i => i.id === tx.itemId);
+      const receiver = receivers.find(r => r.id === tx.receiverId);
+      
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = !searchQuery || 
+        item?.name.toLowerCase().includes(searchLower) ||
+        tx.batchNumber?.toLowerCase().includes(searchLower) ||
+        tx.notes?.toLowerCase().includes(searchLower) ||
+        receiver?.name.toLowerCase().includes(searchLower) ||
+        tx.receivedBy?.toLowerCase().includes(searchLower);
+
       const matchItem = filters.itemId === 'ALL' || tx.itemId === filters.itemId;
       const matchReceiver = filters.receiverId === 'ALL' || tx.receiverId === filters.receiverId;
       const matchType = filters.type === 'ALL' || tx.type === filters.type;
-      return matchItem && matchReceiver && matchType;
+      
+      return matchesSearch && matchItem && matchReceiver && matchType;
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -37,7 +50,18 @@ export function HistoryView() {
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Audit Trail & Activity Log</p>
       </div>
 
-      <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200/50 shadow-[0_15px_40px_-5px_rgba(0,0,0,0.04)] ring-1 ring-slate-900/5 space-y-5">
+      <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200/50 shadow-[0_15px_40px_-5px_rgba(0,0,0,0.04)] ring-1 ring-slate-900/5 space-y-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input 
+            type="text"
+            placeholder="Search transactions, batches, or notes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-100 rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none transition-all"
+          />
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <Select 
             label="Product Filter"

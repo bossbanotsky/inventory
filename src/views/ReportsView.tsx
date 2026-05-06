@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useInventoryStore, formatPieces } from '../lib/store';
-import { BarChart3, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { BarChart3, ArrowDownLeft, ArrowUpRight, Search } from 'lucide-react';
 import { cn, formatDateTimePHT } from '../lib/utils';
 
 type Period = 'DAY' | 'WEEK' | 'MONTH';
@@ -8,6 +8,7 @@ type Period = 'DAY' | 'WEEK' | 'MONTH';
 export function ReportsView() {
   const { transactions, items, receivers } = useInventoryStore();
   const [period, setPeriod] = useState<Period>('DAY');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const getFilteredTransactions = () => {
     const now = new Date();
@@ -44,7 +45,9 @@ export function ReportsView() {
   const periodItems = items.map(item => {
     const itemTxs = filteredTxs.filter(tx => tx.itemId === item.id);
     return { ...item, transactions: itemTxs };
-  }).filter(item => item.transactions.length > 0);
+  })
+  .filter(item => item.transactions.length > 0)
+  .filter(item => !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="flex flex-col gap-8 w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -88,9 +91,24 @@ export function ReportsView() {
       </div>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between px-2">
-            <h2 className="font-black text-slate-900 text-[10px] uppercase tracking-widest">Movement Log</h2>
-            <div className="h-px flex-1 mx-4 bg-slate-100 rounded-full" />
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between px-2">
+              <h2 className="font-black text-slate-900 text-[10px] uppercase tracking-widest">Movement Log</h2>
+              <div className="h-px flex-1 mx-4 bg-slate-100 rounded-full" />
+          </div>
+          
+          <div className="px-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input 
+                type="text"
+                placeholder="Search products in reports..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-[10px] font-medium focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none transition-all shadow-sm"
+              />
+            </div>
+          </div>
         </div>
         
         {periodItems.length === 0 ? (

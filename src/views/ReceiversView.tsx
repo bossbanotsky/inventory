@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useInventoryStore, getStockLevel, formatPieces, convertToBaseUnit, UOM_SYSTEM } from '../lib/store';
 import { Button, Input, Select } from '../components/ui/Forms';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import { Users, Plus, X, Trash2, User as UserIcon, PackageSearch, History as HistoryIcon } from 'lucide-react';
+import { Users, Plus, X, Trash2, User as UserIcon, PackageSearch, History as HistoryIcon, Search } from 'lucide-react';
 import { cn, formatDateTimePHT } from '../lib/utils';
 
 export function ReceiversView() {
@@ -11,6 +11,7 @@ export function ReceiversView() {
   const [showDisburseForm, setShowDisburseForm] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{isOpen: boolean, id: string, name: string}>({ isOpen: false, id: '', name: '' });
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [disburseQuantity, setDisburseQuantity] = useState<number | ''>('');
   const [disburseLoose, setDisburseLoose] = useState<number | ''>('');
@@ -95,6 +96,19 @@ export function ReceiversView() {
         </Button>
       </div>
 
+      <div className="px-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input 
+            type="text"
+            placeholder="Search partners or departments..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none transition-all shadow-sm"
+          />
+        </div>
+      </div>
+
       {showAddForm && (
         <div className="bg-white p-8 rounded-[2.5rem] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.1)] border border-slate-200/50 animate-in fade-in zoom-in-95 duration-500 ring-1 ring-slate-900/5">
           <div className="flex justify-between items-center mb-8">
@@ -138,7 +152,12 @@ export function ReceiversView() {
         </div>
       ) : (
         <div className="flex flex-col gap-5 text-slate-900">
-          {receivers.map(receiver => {
+          {receivers
+            .filter(r => 
+              r.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+              r.department?.toLowerCase().includes(searchQuery.toLowerCase())
+            )
+            .map(receiver => {
             const isDisbursing = showDisburseForm === receiver.id;
             const isViewingHistory = showHistory === receiver.id;
             const receiverTxs = transactions.filter(t => t.receiverId === receiver.id);

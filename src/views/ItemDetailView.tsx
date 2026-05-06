@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useInventoryStore, getStockLevel, formatPieces } from '../lib/store';
-import { ChevronLeft, Package, History, Layers, Calendar, User, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, Package, History, Layers, Calendar, User, AlertTriangle, Search } from 'lucide-react';
 import { cn, formatDateTimePHT, formatDatePHT } from '../lib/utils';
 
 export function ItemDetailView() {
   const { items, transactions, selectedItemId } = useInventoryStore();
+  const [searchQuery, setSearchQuery] = useState('');
   const item = items.find(i => i.id === selectedItemId);
 
   if (!item) return null;
@@ -14,6 +15,13 @@ export function ItemDetailView() {
 
   const itemTxs = transactions
     .filter(tx => tx.itemId === item.id)
+    .filter(tx => {
+      const searchLower = searchQuery.toLowerCase();
+      return !searchQuery || 
+        tx.notes?.toLowerCase().includes(searchLower) ||
+        tx.receivedBy?.toLowerCase().includes(searchLower) ||
+        tx.batchNumber?.toLowerCase().includes(searchLower);
+    })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   // Group by batch for display
@@ -146,11 +154,26 @@ export function ItemDetailView() {
         )}
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-2">
-            <h2 className="font-black text-slate-900 text-[10px] uppercase tracking-widest flex items-center gap-2">
-              <History className="w-3.5 h-3.5 text-slate-400" /> Operational Record
-            </h2>
+      <div className="space-y-4">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between px-2">
+              <h2 className="font-black text-slate-900 text-[10px] uppercase tracking-widest flex items-center gap-2">
+                <History className="w-3.5 h-3.5 text-slate-400" /> Operational Record
+              </h2>
+          </div>
+
+          <div className="px-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input 
+                type="text"
+                placeholder="Search notes, recipients, or batches..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-[10px] font-medium focus:ring-2 focus:ring-slate-900 focus:border-slate-900 outline-none transition-all shadow-sm"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2.5">
