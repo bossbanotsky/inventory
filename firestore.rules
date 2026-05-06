@@ -4,7 +4,10 @@ service cloud.firestore {
     // 0. Global Safety Net
     match /{document=**} { allow read, write: if false; }
 
-    function isSignedIn() { return request.auth != null; }
+    function isSignedIn() { 
+      return request.auth != null && request.auth.token.email_verified == true; 
+    }
+    
     function isAdmin() { return isSignedIn(); } 
     
     function incoming() { return request.resource.data; }
@@ -16,14 +19,18 @@ service cloud.firestore {
 
     function isValidItem(data) {
       return data.keys().hasAll(['name', 'itemType', 'baseUnit', 'piecesPerUnit', 'createdAt', 'totalPieces'])
-        && data.size() >= 6 && data.size() <= 8
+        && data.size() >= 6 && data.size() <= 12
         && data.name is string && data.name.size() > 0 && data.name.size() <= 200
         && data.itemType is string && data.itemType in ['COUNTABLE', 'LENGTH', 'WEIGHT', 'VOLUME']
         && data.baseUnit is string && data.baseUnit.size() > 0 && data.baseUnit.size() <= 50
         && data.piecesPerUnit is number
         && data.createdAt is number
         && data.totalPieces is number
-        && (!data.keys().hasAny(['lowStockThreshold']) || data.lowStockThreshold == null || data.lowStockThreshold is number);
+        && (!data.keys().hasAny(['lowStockThreshold']) || data.lowStockThreshold == null || data.lowStockThreshold is number)
+        && (!data.keys().hasAny(['lengthPerUnit']) || data.lengthPerUnit == null || data.lengthPerUnit is number)
+        && (!data.keys().hasAny(['width']) || data.width == null || data.width is number)
+        && (!data.keys().hasAny(['height']) || data.height == null || data.height is number)
+        && (!data.keys().hasAny(['density']) || data.density == null || data.density is number);
     }
 
     function isValidReceiver(data) {
@@ -52,30 +59,30 @@ service cloud.firestore {
     match /items/{itemId} {
       allow list: if isSignedIn();
       allow get: if isSignedIn() && isValidId(itemId);
-      allow create: if isSignedIn() && isValidId(itemId) && isValidItem(incoming());
-      allow update: if isSignedIn() && isValidId(itemId) && isValidItem(incoming());
-      allow delete: if isSignedIn() && isValidId(itemId);
+      allow create: if isAdmin() && isValidId(itemId) && isValidItem(incoming());
+      allow update: if isAdmin() && isValidId(itemId) && isValidItem(incoming());
+      allow delete: if isAdmin() && isValidId(itemId);
     }
     
     match /receivers/{receiverId} {
       allow list: if isSignedIn();
       allow get: if isSignedIn() && isValidId(receiverId);
-      allow create: if isSignedIn() && isValidId(receiverId) && isValidReceiver(incoming());
-      allow update: if isSignedIn() && isValidId(receiverId) && isValidReceiver(incoming());
-      allow delete: if isSignedIn() && isValidId(receiverId);
+      allow create: if isAdmin() && isValidId(receiverId) && isValidReceiver(incoming());
+      allow update: if isAdmin() && isValidId(receiverId) && isValidReceiver(incoming());
+      allow delete: if isAdmin() && isValidId(receiverId);
     }
 
     match /transactions/{transactionId} {
       allow list: if isSignedIn();
       allow get: if isSignedIn() && isValidId(transactionId);
-      allow create: if isSignedIn() && isValidId(transactionId) && isValidTransaction(incoming())
+      allow create: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming())
         && exists(/databases/$(database)/documents/items/$(incoming().itemId));
-      allow update: if isSignedIn() && isValidId(transactionId) && isValidTransaction(incoming());
-      allow delete: if isSignedIn() && isValidId(transactionId);
+      allow update: if isAdmin() && isValidId(transactionId) && isValidTransaction(incoming());
+      allow delete: if isAdmin() && isValidId(transactionId);
     }
 
     match /admins/{adminId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isAdmin();
     }
   }
 }
