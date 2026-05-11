@@ -46,7 +46,8 @@ export const UOM_SYSTEM: Record<ItemType, { base: string; options: UOMDefinition
       { name: 'liter', factor: 1, type: 'VOLUME' },
       { name: 'milliliter', factor: 0.001, type: 'VOLUME' },
       { name: 'cubic meter', factor: 1000, type: 'VOLUME' },
-      { name: 'gallon', factor: 3.78541, type: 'VOLUME' },
+      { name: 'gallon', factor: 4, type: 'VOLUME' },
+      { name: 'piece', factor: 4, type: 'VOLUME' },
     ]
   }
 };
@@ -294,7 +295,20 @@ export const formatPieces = (pieces: number, itemType: ItemType, baseUnit: strin
     return `${pieces.toFixed(2)} kg`;
   }
   if (itemType === 'VOLUME') {
+    if (pieces === 0) return '0 liters';
     if (pieces < 0.1) return `${(pieces * 1000).toFixed(2)} ml`;
+    
+    // Check for full gallons (4 liters per gallon)
+    const gallons = Math.floor(pieces / 4);
+    const remainingLiters = pieces % 4;
+    
+    if (gallons > 0) {
+      if (remainingLiters === 0) {
+        return `${gallons} gallon${gallons !== 1 ? 's' : ''}`;
+      }
+      return `${gallons} gal, ${remainingLiters.toFixed(2)} l`;
+    }
+    
     return `${pieces.toFixed(2)} l`;
   }
 

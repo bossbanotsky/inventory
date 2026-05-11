@@ -38,8 +38,9 @@ export function ReceiversView() {
     const loose = Number(disburseLoose) || 0;
     const uom = disburseUom;
 
-    const unitFactor = uom === 'box' ? selectedItem.piecesPerUnit : (UOM_SYSTEM[selectedItem.itemType]?.options.find(o => o.name === uom)?.factor || 1);
-    const standardizedPieces = (qty * unitFactor) + loose;
+    const pieceFactor = uomOptions.find(o => o.name === 'piece')?.factor || 1;
+    const unitFactor = uom === 'box' ? selectedItem.piecesPerUnit : (uomOptions.find(o => o.name === uom)?.factor || 1);
+    const standardizedPieces = (qty * unitFactor) + (loose * pieceFactor);
 
     if (standardizedPieces <= 0) return;
 
@@ -277,10 +278,10 @@ export function ReceiversView() {
                                       type="number" 
                                       step="any"
                                       min="0" 
-                                      label={`Additional Loose ${selectedItem.baseUnit}s`}
+                                      label={`Additional Loose ${selectedItem.itemType === 'COUNTABLE' ? selectedItem.baseUnit : 'Pieces (Gallons/Cans)'}`}
                                       value={disburseLoose}
                                       onChange={(e) => setDisburseLoose(e.target.value ? Number(e.target.value) : '')}
-                                      placeholder={`e.g. Extra ${selectedItem.baseUnit}s`}
+                                      placeholder={`Extra units`}
                                     />
                                   </div>
                                 )}
@@ -354,7 +355,7 @@ export function ReceiversView() {
                                     inputQuantity: cartItem.qty,
                                     inputUom: cartItem.uom,
                                     displayString: cartItem.loose > 0 
-                                      ? `Distributed ${cartItem.qty} ${cartItem.uom} & ${cartItem.loose} ${item.baseUnit}${cartItem.loose !== 1 ? 's' : ''}`
+                                      ? `Distributed ${cartItem.qty} ${cartItem.uom} & ${cartItem.loose} ${item.itemType === 'COUNTABLE' ? item.baseUnit : 'piece'}${cartItem.loose !== 1 ? 's' : ''}`
                                       : `Distributed ${cartItem.qty} ${cartItem.uom}`,
                                     receivedBy,
                                     notes,

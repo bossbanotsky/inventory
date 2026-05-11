@@ -370,8 +370,9 @@ export function InventoryView() {
                               let batchNumber = fd.get('batchNumber') as string;
                               const receiveDateStr = fd.get('receiveDate') as string;
                               
-                              const unitFactor = uom === 'box' ? item.piecesPerUnit : (UOM_SYSTEM[item.itemType]?.options.find(o => o.name === uom)?.factor || 1);
-                              const standardizedPieces = (qty * unitFactor) + loose;
+                              const pieceFactor = uomOptions.find(o => o.name === 'piece')?.factor || 1;
+                              const unitFactor = uom === 'box' ? item.piecesPerUnit : (uomOptions.find(o => o.name === uom)?.factor || 1);
+                              const standardizedPieces = (qty * unitFactor) + (loose * pieceFactor);
                               
                               if (standardizedPieces <= 0) return;
 
@@ -393,7 +394,7 @@ export function InventoryView() {
                                 inputQuantity: qty,
                                 inputUom: uom,
                                 displayString: loose > 0 
-                                  ? `Received ${qty} ${uom} & ${loose} ${item.baseUnit}${loose !== 1 ? 's' : ''}`
+                                  ? `Received ${qty} ${uom} & ${loose} ${item.itemType === 'COUNTABLE' ? item.baseUnit : 'piece'}${loose !== 1 ? 's' : ''}`
                                   : `Received ${qty} ${uom}`,
                                 notes: supplierName ? `From ${supplierName} | ${notes}` : notes,
                                 batchNumber: finalBatchNumber,
@@ -445,13 +446,13 @@ export function InventoryView() {
                                   type="number" 
                                   step="any"
                                   min="0" 
-                                  label={`Additional Loose ${item.baseUnit}s`}
+                                  label={`Additional Loose ${item.itemType === 'COUNTABLE' ? item.baseUnit : 'Pieces (Gallons/Cans)'}`}
                                   value={receiveLoose}
                                   onChange={(e) => setReceiveLoose(e.target.value ? Number(e.target.value) : '')}
-                                  placeholder={`e.g. Extra ${item.baseUnit}s`}
+                                  placeholder="Extra units"
                                 />
                                 <p className="text-[8px] font-bold text-slate-400 mt-2 uppercase tracking-tight">
-                                  Total logic: ({receiveQuantity || 0} {receiveUom}) + ({receiveLoose || 0} {item.baseUnit})
+                                  Total logic: ({receiveQuantity || 0} {receiveUom}) + ({receiveLoose || 0} {item.itemType === 'COUNTABLE' ? item.baseUnit : 'pc'})
                                 </p>
                               </div>
                             )}
